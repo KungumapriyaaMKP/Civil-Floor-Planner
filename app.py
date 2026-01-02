@@ -20,7 +20,6 @@ def parse_prompt(prompt):
         "garage": 1 if "garage" in prompt else 0
     }
 
-    # Fallback if nothing detected
     if sum(layout.values()) == 0:
         layout = {
             "living_room": 1,
@@ -44,16 +43,11 @@ ROOM_OBJECTS = {
 }
 
 # ----------------------------
-# 3️⃣ Room Placement Logic (shared for both raw & 3D)
+# 3️⃣ Room Placement Logic
 # ----------------------------
 def compute_room_positions(layout):
-    """
-    Returns dict with room positions: (x, y, width, height)
-    Grid-based, preserves order for raw & 3D
-    """
     positions = {}
     start_x, start_y = 50, 50
-    gap_x, gap_y = 20, 20
     x, y = start_x, start_y
 
     # Living Room
@@ -98,27 +92,37 @@ def draw_raw_plan(layout, positions):
     img = Image.new("RGB", (800, 500), "white")
     draw = ImageDraw.Draw(img)
 
+    try:
+        font = ImageFont.load_default()
+    except:
+        font = None
+
     for key, (x, y, w, h) in positions.items():
-        draw.rectangle([x, y, w, h], outline="black", width=3)
-        # Label
+        draw.rectangle([x, y, x + (w - x), y + (h - y)], outline="black", width=3)
         label = key.replace("_", " ").title()
-        draw.text((x + 5, y + 5), label, fill="black")
+        draw.text((x + 5, y + 5), label, fill="black", font=font)
 
     return img
 
 # ----------------------------
-# 5️⃣ 3D Plan with Objects
+# 5️⃣ 3D Engineering Plan with Objects
 # ----------------------------
 def draw_3d_plan(layout, positions):
     img = Image.new("RGB", (800, 500), "#f4f4f4")
     draw = ImageDraw.Draw(img)
-    depth = 15  # 3D shadow depth
+    depth = 15
+
+    try:
+        font = ImageFont.load_default()
+    except:
+        font = None
 
     for key, (x, y, w, h) in positions.items():
-        # Wall shadow
-        draw.rectangle([x + depth, y + depth, w + depth, h + depth], fill="#cfcfcf")
-        # Top face
-        color = "#e3f2fd"  # default floor color
+        # Shadow
+        draw.rectangle([x + depth, y + depth, x + (w - x) + depth, y + (h - y) + depth], fill="#cfcfcf")
+
+        # Room color
+        color = "#e3f2fd"  # default
         if "bedroom" in key:
             color = "#e8f5e9"
         elif "kitchen" in key:
@@ -130,10 +134,10 @@ def draw_3d_plan(layout, positions):
         elif "garage" in key:
             color = "#d7ccc8"
 
-        draw.rectangle([x, y, w, h], fill=color, outline="black", width=3)
-        # Label
+        # Draw room
+        draw.rectangle([x, y, x + (w - x), y + (h - y)], fill=color, outline="black", width=3)
         label = key.replace("_", " ").title()
-        draw.text((x + 5, y + 5), label, fill="black")
+        draw.text((x + 5, y + 5), label, fill="black", font=font)
 
         # Draw objects
         room_type = "living_room" if "living" in key else key.split("_")[0]
@@ -144,7 +148,7 @@ def draw_3d_plan(layout, positions):
             obj_x = x + 5 + (idx % 2) * (obj_w + 5)
             obj_y = y + 25 + (idx // 2) * (obj_h + 5)
             draw.rectangle([obj_x, obj_y, obj_x + obj_w, obj_y + obj_h], fill=obj["color"])
-            draw.text((obj_x + 2, obj_y + 2), obj["label"], fill="black")
+            draw.text((obj_x + 2, obj_y + 2), obj["label"], fill="black", font=font)
 
     return img
 
