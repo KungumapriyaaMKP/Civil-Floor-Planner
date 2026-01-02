@@ -1,74 +1,91 @@
 import gradio as gr
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw
+import re
 
 # ----------------------------
-# Layout Generator (RULE BASED)
+# Parse user input intelligently
 # ----------------------------
-def generate_layout(prompt):
+def parse_prompt(prompt):
     prompt = prompt.lower()
 
-    rooms = []
+    def extract_count(word, default=1):
+        match = re.search(rf"(\d+)\s*{word}", prompt)
+        return int(match.group(1)) if match else default if word in prompt else 0
 
-    if "living" in prompt:
-        rooms.append("Living Room")
-    if "bedroom" in prompt:
-        count = 2 if "2" in prompt else 1
-        for i in range(count):
-            rooms.append(f"Bedroom {i+1}")
-    if "kitchen" in prompt:
-        rooms.append("Kitchen")
-    if "bathroom" in prompt:
-        rooms.append("Bathroom")
+    layout = {
+        "living_room": 1 if "living" in prompt or "hall" in prompt else 0,
+        "bedrooms": extract_count("bedroom"),
+        "bathrooms": extract_count("bathroom"),
+        "kitchen": 1 if "kitchen" in prompt else 0
+    }
 
-    if not rooms:
-        rooms = ["Living Room", "Bedroom", "Kitchen"]
+    # fallback
+    if sum(layout.values()) == 0:
+        layout = {
+            "living_room": 1,
+            "bedrooms": 1,
+            "bathrooms": 1,
+            "kitchen": 1
+        }
 
-    return rooms
+    return layout
 
 
 # ----------------------------
-# Floor Plan Drawer
+# Draw floor plan dynamically
 # ----------------------------
-def draw_floor_plan(rooms):
-    img = Image.new("RGB", (600, 400), "white")
+def draw_floor_plan(layout):
+    img = Image.new("RGB", (700, 450), "white")
     draw = ImageDraw.Draw(img)
 
     x, y = 20, 20
-    w, h = 180, 120
 
-    for room in rooms:
-        draw.rectangle([x, y, x + w, y + h], outline="black", width=3)
-        draw.text((x + 10, y + 50), room, fill="black")
+    def room(box_w, box_h, label):
+        nonlocal x, y
+        draw.rectangle([x, y, x + box_w, y + box_h], outline="black", width=3)
+        draw.text((x + 10, y + 10), label, fill="black")
+        y += box_h + 15
 
-        x += w + 20
-        if x + w > 580:
-            x = 20
-            y += h + 20
+    # Living room (largest)
+    if layout["living_room"]:
+        room(320, 160, "Living Room")
+
+    # Kitchen
+    if layout["kitchen"]:
+        room(200, 120, "Kitchen")
+
+    # Bedrooms
+    for i in range(layout["bedrooms"]):
+        room(220, 130, f"Bedroom {i+1}")
+
+    # Bathrooms
+    for i in range(layout["bathrooms"]):
+        room(140, 90, f"Bathroom {i+1}")
 
     return img
 
 
 # ----------------------------
-# Main Function
+# Main pipeline
 # ----------------------------
 def generate_floor_plan(prompt):
-    rooms = generate_layout(prompt)
-    image = draw_floor_plan(rooms)
+    layout = parse_prompt(prompt)
+    image = draw_floor_plan(layout)
     return image
 
 
 # ----------------------------
-# Gradio UI
+# UI
 # ----------------------------
 demo = gr.Interface(
     fn=generate_floor_plan,
     inputs=gr.Textbox(
         label="Describe your floor plan",
-        placeholder="Example: 2 bedroom house with living room and kitchen"
+        placeholder="Example: 3 bedroom house with kitchen and 2 bathrooms"
     ),
     outputs=gr.Image(label="Generated Floor Plan"),
-    title="VOICE2PLAN-AI (Hybrid Mode)",
-    description="Fast, free AI-assisted floor plan generator using rule-based layout."
+    title="VOICE2PLAN-AI (Adaptive Layout)",
+    description="Understands user changes and dynamically modifies the floor plan."
 )
 
 demo.launch()
