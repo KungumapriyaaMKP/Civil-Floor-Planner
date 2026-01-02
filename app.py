@@ -1,39 +1,44 @@
+# app.py
+
 import gradio as gr
-from layout_engine import generate_layout  # your existing function
+from layout_engine import generate_layout
 
-# Example function to wrap your floor plan generator
-def create_floorplan(plot_width, plot_length, rooms_json):
+def create_floor_plan(width, height, rooms_text):
     """
-    Inputs:
-        plot_width (int): Width of the plot
-        plot_length (int): Length of the plot
-        rooms_json (str): JSON string describing rooms and their dimensions
-    Returns:
-        Path to generated floorplan image
+    width: int (plot width)
+    height: int (plot height)
+    rooms_text: str (room_name:width,height per line)
     """
-    import json
     try:
-        rooms = json.loads(rooms_json)
+        rooms = {}
+        lines = rooms_text.strip().split("\n")
+        for line in lines:
+            name, size = line.split(":")
+            w, h = map(int, size.split(","))
+            rooms[name.strip()] = (w, h)
+        
+        layout = generate_layout((width, height), rooms)
+        output = ""
+        for room, coords in layout.items():
+            output += f"{room}: x={coords[0]}, y={coords[1]}, width={coords[2]}, height={coords[3]}\n"
+        return output
     except Exception as e:
-        return f"Invalid rooms JSON: {e}"
+        return f"Error: {str(e)}"
 
-    # Generate layout using your existing function
-    floorplan_img = generate_layout(plot_width, plot_length, rooms)
-
-    return floorplan_img  # should be a path to an image or PIL Image
-
-# Define the Gradio interface
 demo = gr.Interface(
-    fn=create_floorplan,
+    fn=create_floor_plan,
     inputs=[
-        gr.Number(label="Plot Width (meters)"),
-        gr.Number(label="Plot Length (meters)"),
-        gr.Textbox(label="Rooms JSON", placeholder='{"Living": [5,4], "Bedroom": [4,3]}')
+        gr.Number(label="Plot Width"),
+        gr.Number(label="Plot Height"),
+        gr.Textbox(
+            label="Rooms (format: room_name:width,height per line)",
+            lines=10,
+            placeholder="LivingRoom:5,6\nBedroom:4,4"
+        )
     ],
-    outputs=gr.Image(type="pil"),  # expects PIL Image output from your function
+    outputs="text",
     title="Civil Floor Plan Generator",
-    description="Generate building floor plans by providing plot dimensions and room details in JSON format.",
+    description="Enter plot dimensions and room sizes to get a simple floor plan layout."
 )
 
-# Launch the app with a public link on Hugging Face Spaces
 demo.launch(share=True)
