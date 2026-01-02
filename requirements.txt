@@ -1,4 +1,6 @@
-gradio
-numpy
 torch
-Pillow
+diffusers
+transformers
+accelerate
+gradio
+pillow
