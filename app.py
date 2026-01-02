@@ -1,101 +1,54 @@
-# app.py
 import gradio as gr
-import matplotlib.pyplot as plt
-import matplotlib.patches as patches
+import torch
+from diffusers import StableDiffusionPipeline
+from PIL import Image
 
-# Simple layout engine: places rooms in rows, adds doors/windows
-def generate_layout(plot_size, rooms):
-    """
-    rooms: dict of room_name -> (width, height)
-    Returns: dict of room_name -> (x, y, width, height)
-    """
-    layout = {}
-    plot_width, plot_height = plot_size
-    x_cursor = 0
-    y_cursor = 0
-    max_row_height = 0
+# ----------------------------
+# Model configuration
+# ----------------------------
+MODEL_ID = "PRAMAY3000/floor-plan-generation"
 
-    for name, (w, h) in rooms.items():
-        if x_cursor + w > plot_width:
-            # wrap to next row
-            x_cursor = 0
-            y_cursor += max_row_height + 1  # add 1 unit gap
-            max_row_height = 0
+device = "cuda" if torch.cuda.is_available() else "cpu"
 
-        layout[name] = (x_cursor, y_cursor, w, h)
-        x_cursor += w + 1  # 1 unit gap between rooms
-        max_row_height = max(max_row_height, h)
-
-    return layout
-
-def create_floor_plan(width, height, rooms_text):
-    """
-    width: int (plot width)
-    height: int (plot height)
-    rooms_text: str (room_name:width,height per line)
-    """
-    try:
-        # Parse input rooms
-        rooms = {}
-        lines = rooms_text.strip().split("\n")
-        for line in lines:
-            if ":" not in line:
-                continue
-            name, size = line.split(":")
-            w, h = map(int, size.split(","))
-            rooms[name.strip()] = (w, h)
-        
-        # Generate layout
-        layout = generate_layout((width, height), rooms)
-
-        # Draw floor plan
-        fig, ax = plt.subplots(figsize=(8,8))
-        for room, coords in layout.items():
-            x, y, w, h = coords
-            # Room rectangle
-            rect = patches.Rectangle((x, y), w, h, linewidth=2, edgecolor='black', facecolor='lightgray')
-            ax.add_patch(rect)
-            # Room name
-            ax.text(x + w/2, y + h/2, room, ha='center', va='center', fontsize=10, weight='bold')
-
-            # Optional: add simple doors/windows (for demo)
-            # Draw a small door on the bottom wall
-            door_width = min(2, w/4)
-            ax.plot([x + w/2 - door_width/2, x + w/2 + door_width/2], [y, y], color='brown', linewidth=3)
-            # Draw a small window on the top wall
-            window_width = min(2, w/4)
-            ax.plot([x + w/2 - window_width/2, x + w/2 + window_width/2], [y + h, y + h], color='blue', linewidth=2)
-
-        ax.set_xlim(0, width + 2)
-        ax.set_ylim(0, height + 2)
-        ax.set_aspect('equal')
-        ax.axis('off')  # hide axes
-        ax.set_title("2D Floor Plan", fontsize=14)
-
-        # Flip y-axis to match traditional floor plan view
-        plt.gca().invert_yaxis()
-
-        return fig
-
-    except Exception as e:
-        return f"Error: {str(e)}"
-
-
-# Gradio Interface
-demo = gr.Interface(
-    fn=create_floor_plan,
-    inputs=[
-        gr.Number(label="Plot Width"),
-        gr.Number(label="Plot Height"),
-        gr.Textbox(
-            label="Rooms (format: room_name:width,height per line)",
-            lines=10,
-            placeholder="Master Bedroom:14,12\nBedroom 2:12,10\nBathroom:6,5"
-        )
-    ],
-    outputs=gr.Image(type="matplotlib"),
-    title="Civil Floor Plan Generator",
-    description="Enter plot dimensions and room sizes to get a 2D schematic floor plan."
+pipe = StableDiffusionPipeline.from_pretrained(
+    MODEL_ID,
+    torch_dtype=torch.float16 if device == "cuda" else torch.float32
 )
 
-demo.launch(share=True)
+pipe = pipe.to(device)
+
+# ----------------------------
+# Generation function
+# ----------------------------
+def generate_floor_plan(prompt):
+    if not prompt.strip():
+        return None
+
+    enhanced_prompt = (
+        f"{prompt}, professional architectural floor plan, "
+        f"top view, clear walls, labeled rooms, clean layout, blueprint style"
+    )
+
+    image = pipe(
+        enhanced_prompt,
+        num_inference_steps=50,
+        guidance_scale=8.0
+    ).images[0]
+
+    return image
+
+# ----------------------------
+# Gradio UI
+# ----------------------------
+demo = gr.Interface(
+    fn=generate_floor_plan,
+    inputs=gr.Textbox(
+        label="Describe your floor plan",
+        placeholder="Example: 2 bedroom house with living room, kitchen, 2 bathrooms, 1200 sqft"
+    ),
+    outputs=gr.Image(label="Generated Floor Plan"),
+    title="VOICE2PLAN – AI Floor Plan Generator",
+    description="Describe your building in text and get an AI-generated floor plan."
+)
+
+demo.launch()
