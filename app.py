@@ -41,4 +41,5 @@ demo = gr.Interface(
     description="Enter plot dimensions and room sizes to get a simple floor plan layout."
 )
 
-demo.launch()
+demo.launch(share=True)
+
