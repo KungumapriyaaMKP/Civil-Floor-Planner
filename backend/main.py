@@ -18,11 +18,20 @@ app = FastAPI(title="CivilPlan AI Backend")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "http://localhost:5173",
+        "http://localhost:7860",
+        "https://civil-floor-plan-generator.web.app",
+        "https://civil-floor-plan-generator.firebaseapp.com"
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.get("/api/health")
+async def health_check():
+    return {"status": "ok", "engine": "ready"}
 
 # Serve Frontend (Static Files)
 # We mount 'frontend/dist' to root

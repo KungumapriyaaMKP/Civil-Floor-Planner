@@ -26,16 +26,15 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 const API_BASE = window.location.hostname === "localhost"
   ? "http://localhost:7860/api"
-  : "/api";
+  : "https://kungumapriyaa-civil-project.hf.space/api";
 
 const App = () => {
   const [plotSize, setPlotSize] = useState("40x30");
   const [roomText, setRoomText] = useState("Master Bedroom, 14, 12, top-left\nLiving, 20, 15, center\nKitchen, 12, 10, bottom-right\nBath, 8, 6, any");
   const [layout, setLayout] = useState(null);
   const [plotlyData, setPlotlyData] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [isRecording, setIsRecording] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [error, setError] = useState(null);
 
   const blueprintRef = useRef(null);
   const mediaRecorderRef = useRef(null);
@@ -47,7 +46,7 @@ const App = () => {
   }, []);
 
   const generateLayout = async () => {
-    setLoading(true);
+    setError(null);
     try {
       const resp = await axios.post(`${API_BASE}/generate`, {
         plot_size: plotSize,
@@ -57,6 +56,7 @@ const App = () => {
       setPlotlyData(null);
     } catch (err) {
       console.error(err);
+      setError("Failed to connect to AI Engine. Ensure backend is running.");
     } finally {
       setLoading(false);
     }
@@ -178,8 +178,8 @@ const App = () => {
               onMouseDown={startRecording}
               onMouseUp={stopRecording}
               className={`w-full py-4 rounded-xl flex items-center justify-center gap-3 font-bold text-xs tracking-widest transition-all ${isRecording
-                  ? 'bg-red-500 text-white shadow-[0_0_20px_rgba(239,68,68,0.4)] animate-pulse'
-                  : 'bg-zinc-900 border border-zinc-800 text-slate-300 hover:border-indigo-500/50 hover:text-white group'
+                ? 'bg-red-500 text-white shadow-[0_0_20px_rgba(239,68,68,0.4)] animate-pulse'
+                : 'bg-zinc-900 border border-zinc-800 text-slate-300 hover:border-indigo-500/50 hover:text-white group'
                 }`}
             >
               {isRecording ? (
@@ -242,7 +242,12 @@ const App = () => {
           </button>
         </div>
 
-        <div className="p-8 border-t border-zinc-900/50 bg-black/20 text-center">
+        <div className="p-8 border-t border-zinc-900/50 bg-black/20 text-center space-y-3">
+          {error && (
+            <p className="text-[10px] text-red-500 font-bold bg-red-500/10 p-2 rounded-lg border border-red-500/20 italic">
+              {error}
+            </p>
+          )}
           <p className="text-[9px] text-zinc-600 font-bold tracking-widest flex items-center justify-center gap-2">
             <Settings className="w-3 h-3" /> ENGINE READY
           </p>
