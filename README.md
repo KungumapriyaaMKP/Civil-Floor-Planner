@@ -17,7 +17,7 @@ pinned: false
 
 ---
 
-## 🌟 Overview
+##  Overview🌟
 
 **Civil Floor Plan Generator** is an AI-powered architectural design system that converts **natural language and voice inputs** into **valid 2D floor plans and real-time 3D visualizations**.
 
@@ -27,7 +27,7 @@ The result is a fast, intuitive, and accessible approach to early-stage architec
 
 ---
 
-## 🚀 Key Features
+##  Key Features🚀
 
 ### 🎙️ Intelligent Voice-Based Input
 - Powered by **OpenAI Whisper** for accurate speech-to-text transcription.
@@ -47,7 +47,7 @@ A rule-based procedural engine that ensures:
 
 ---
 
-### 🧊 Real-Time 3D Visualization
+###  Real-Time 3D Visualization🧊
 - Instant transformation of 2D plans into a **3D Dollhouse View**
 - Transparent walls for interior inspection
 - **Procedural furniture placement** based on room type
@@ -55,14 +55,14 @@ A rule-based procedural engine that ensures:
 
 ---
 
-## 🎨 Prompting Guide (For Best Results)
+##  Prompting Guide (For Best Results)🎨
 
 Clear and structured prompts lead to more accurate layouts.
 
-### ✅ Recommended Prompt Style
+###  Recommended Prompt Style✅
 > *“Create a house with a 15x20 living room, a 12x12 bedroom, and a 10x10 kitchen. Add a small balcony next to the bedroom.”*
 
-### 💡 Tips for Judges & Evaluators
+###  Tips for Judges & Evaluators💡
 
 | Aspect | Recommendation | Example |
 |------|----------------|---------|
@@ -90,7 +90,7 @@ The application follows a **Hybrid Cloud Architecture**, separating user interac
 
 ---
 
-## 📦 Technology Stack
+##  Technology Stack📦
 
 ### Frontend
 - React  
@@ -117,4 +117,3 @@ The application follows a **Hybrid Cloud Architecture**, separating user interac
 
 ---
 
-© 2026 Civil Project Team
