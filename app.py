@@ -222,14 +222,20 @@ def create_3d_plot(plot_w, plot_h, rooms, placed, scale):
         # 1. FLOOR (Plane)
         # To avoid z-fighting with plot base, lift slightly
         z_floor = 0.1
+        
+        # Hover Text
+        hover_txt = f"<b>{r['name']}</b><br>{r['w']}ft x {r['h']}ft<br>Area: {r['area']} sq ft"
+        
         fig.add_trace(go.Mesh3d(
             x=[gx, gx+gw, gx+gw, gx],
             y=[gy, gy, gy+gh, gy+gh],
             z=[z_floor, z_floor, z_floor, z_floor],
             i=[0, 0], j=[1, 2], k=[2, 3], # Simple quad triangulation
             color=r["floor_color"],
-            name=f"{r['name']} Floor",
-            flatshading=True
+            name=f"{r['name']}",
+            flatshading=True,
+            hoverinfo="text",
+            hovertext=hover_txt
         ))
         
         # 2. WALLS
