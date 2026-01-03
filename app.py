@@ -303,8 +303,17 @@ def generate_step_2(state):
         gr.Warning(f"3D Generation Error: {str(e)}")
         return gr.update(visible=True)
 
-# Voice Recognition Setup (Lazy Loading)
-asr_pipe = None
+# Voice Recognition Setup (Startup Logic)
+try:
+    print("Loading Whisper Model... this may take a moment.")
+    from transformers import pipeline
+    # Load model at startup to prevent timeout during first request
+    # Using 'tiny' model for speed on CPU
+    asr_pipe = pipeline("automatic-speech-recognition", model="openai/whisper-tiny.en")
+    print("Whisper Model Loaded Successfully.")
+except Exception as e:
+    print(f"Failed to load Whisper: {e}")
+    asr_pipe = None
 
 def parse_natural_language(text):
     """
@@ -350,15 +359,10 @@ def parse_natural_language(text):
 
 def transcribe_voice(audio_path, current_text):
     global asr_pipe
-    if audio_path is None:
+    if audio_path is None or asr_pipe is None:
         return current_text
     
     try:
-        from transformers import pipeline
-        if asr_pipe is None:
-            gr.Info("Loading Whisper Model... (One time only)")
-            asr_pipe = pipeline("automatic-speech-recognition", model="openai/whisper-tiny.en")
-        
         text = asr_pipe(audio_path)["text"]
         text = text.strip()
         
