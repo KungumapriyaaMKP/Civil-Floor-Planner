@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+python-multipart
+gradio
+Pillow
+plotly
+transformers
+torch
+scipy
+word2number

@@ -1,11 +1,8 @@
----
 title: Civil Project
-emoji: 🐨
-colorFrom: purple
-colorTo: purple
-sdk: gradio
-sdk_version: 6.2.0
-app_file: app.py
+emoji: 🏙️
+colorFrom: indigo
+colorTo: slate
+sdk: docker
 pinned: false
 ---
 
