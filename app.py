@@ -483,4 +483,4 @@ with gr.Blocks(theme=gr.themes.Soft(), css=custom_css, title="CivilPlan AI 2.0")
     btn_3d.click(generate_step_2, [state], [plot_out])
 
 if __name__ == "__main__":
-    demo.launch()
+    demo.queue().launch()
