@@ -32,7 +32,7 @@ def check_overlap(x, y, rw, rh, placed, ignore=None):
     return False
 
 # ----------------------------
-# Core layout engine (unchanged logic)
+# Initial layout computation
 # ----------------------------
 def compute_layout(plot_w, plot_h, rooms, scale, px0, py0, px1, py1):
     PADDING = 10
@@ -45,7 +45,7 @@ def compute_layout(plot_w, plot_h, rooms, scale, px0, py0, px1, py1):
         "bottom-of": lambda tx, ty, tw, th, rw, rh: (tx, ty + th + PADDING),
     }
 
-    # First pass (absolute)
+    # First pass (absolute positions)
     for r in rooms:
         rw, rh = int(r["w"] * scale), int(r["h"] * scale)
         pos = r["pos"]
@@ -98,9 +98,9 @@ def compute_layout(plot_w, plot_h, rooms, scale, px0, py0, px1, py1):
     return placed
 
 # ----------------------------
-# Main render + move handler
+# Main render + movement logic
 # ----------------------------
-def generate_plan(plot_size, room_text, selected_room, direction, offsets):
+def generate_plan(plot_size, room_text, selected_room, direction, state):
     plot_w, plot_h = parse_plot_size(plot_size)
     rooms = parse_rooms(room_text)
 
@@ -116,9 +116,15 @@ def generate_plan(plot_size, room_text, selected_room, direction, offsets):
     px0, py0 = MARGIN, MARGIN
     px1, py1 = px0 + int(plot_w * scale), py0 + int(plot_h * scale)
 
-    placed = compute_layout(plot_w, plot_h, rooms, scale, px0, py0, px1, py1)
+    # Initialize state only once
+    if "placed" not in state:
+        state["placed"] = compute_layout(
+            plot_w, plot_h, rooms, scale, px0, py0, px1, py1
+        )
 
-    # Apply movement to selected room
+    placed = state["placed"]
+
+    # Move selected room
     if selected_room in placed:
         x, y, rw, rh = placed[selected_room]
 
@@ -138,6 +144,8 @@ def generate_plan(plot_size, room_text, selected_room, direction, offsets):
         if not check_overlap(nx, ny, rw, rh, placed, ignore=selected_room):
             placed[selected_room] = (nx, ny, rw, rh)
 
+    state["placed"] = placed
+
     # Draw
     img = Image.new("RGB", (CANVAS_W, CANVAS_H), "#f2f2f2")
     draw = ImageDraw.Draw(img)
@@ -148,16 +156,18 @@ def generate_plan(plot_size, room_text, selected_room, direction, offsets):
         font = ImageFont.load_default()
 
     draw.rectangle([px0, py0, px1, py1], outline="black", width=6)
-    draw.text((px0, py0 - 20), f"PLOT {plot_w} x {plot_h}", fill="black", font=font)
+    draw.text((px0, py0 - 20),
+              f"PLOT {plot_w} x {plot_h}",
+              fill="black", font=font)
 
     for r in rooms:
         x, y, rw, rh = placed[r["name_lower"]]
-        draw.rectangle([x, y, x+rw, y+rh], outline="black", width=4)
-        draw.text((x+5, y+5),
+        draw.rectangle([x, y, x + rw, y + rh], outline="black", width=4)
+        draw.text((x + 5, y + 5),
                   f'{r["name"]}\n{r["w"]}x{r["h"]}',
                   fill="black", font=font)
 
-    return img, placed
+    return img, state
 
 # ----------------------------
 # UI
@@ -180,17 +190,17 @@ with gr.Blocks(title="VOICE2PLAN-AI") as demo:
 
     room_select = gr.Dropdown(
         choices=["bedroom", "pooja", "living room", "kitchen", "garage"],
-        label="Select Room to Move",
-        value="bedroom"
+        value="bedroom",
+        label="Select Room to Move"
     )
 
     direction = gr.Radio(
         ["Left", "Right", "Up", "Down"],
-        label="Move Direction",
-        value="Right"
+        value="Right",
+        label="Move Direction"
     )
 
-    move_btn = gr.Button("Apply Move")
+    move_btn = gr.Button("Move Room")
     image = gr.Image(label="Floor Plan")
 
     state = gr.State({})
