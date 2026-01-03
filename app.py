@@ -220,4 +220,5 @@ demo = gr.Interface(
 )
 
 if __name__ == "__main__":
-    demo.queue(concurrency_count=1).launch()
+    demo.queue().launch()
+
