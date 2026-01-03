@@ -306,6 +306,48 @@ def generate_step_2(state):
 # Voice Recognition Setup (Lazy Loading)
 asr_pipe = None
 
+def parse_natural_language(text):
+    """
+    Attempts to extract room details from natural language.
+    Expected patterns: "Kitchen 15 by 10 center", "Master Bedroom 14 x 12 top left"
+    Returns formatted string "Name, W, H, Pos" or original text if parsing fails.
+    """
+    import re
+    text_lower = text.lower()
+    
+    # 1. Extract Room Name (Keywords)
+    room_types = ["master bedroom", "bedroom", "kitchen", "living room", "living", "dining room", "dining", "bathroom", "bath", "garage", "office", "study", "hall", "patio", "deck"]
+    name = "Room"
+    for r in room_types:
+        if r in text_lower:
+            name = text[text_lower.find(r):text_lower.find(r)+len(r)].title()
+            break
+            
+    # 2. Extract Dimensions (e.g., "15 by 12", "15x12", "15 12")
+    # Matches: number followed by x, by, or space, then number
+    dims = re.search(r'(\d+)\s*(?:x|by|\s)\s*(\d+)', text_lower)
+    w, h = 10, 10 # Defaults
+    if dims:
+        w = int(dims.group(1))
+        h = int(dims.group(2))
+    else:
+        # Fallback: look for just two numbers anywhere
+        nums = re.findall(r'\d+', text_lower)
+        if len(nums) >= 2:
+            w = int(nums[0])
+            h = int(nums[1])
+    
+    # 3. Extract Position
+    pos = "any"
+    if "top left" in text_lower or "top-left" in text_lower: pos = "top-left"
+    elif "top right" in text_lower or "top-right" in text_lower: pos = "top-right"
+    elif "bottom left" in text_lower or "bottom-left" in text_lower: pos = "bottom-left"
+    elif "bottom right" in text_lower or "bottom-right" in text_lower: pos = "bottom-right"
+    elif "center" in text_lower or "middle" in text_lower: pos = "center"
+    
+    # Construct CSV
+    return f"{name}, {w}, {h}, {pos}"
+
 def transcribe_voice(audio_path, current_text):
     global asr_pipe
     if audio_path is None:
@@ -318,15 +360,17 @@ def transcribe_voice(audio_path, current_text):
             asr_pipe = pipeline("automatic-speech-recognition", model="openai/whisper-tiny.en")
         
         text = asr_pipe(audio_path)["text"]
-        
-        # Simple formatting cleanup
         text = text.strip()
+        
         if not text: return current_text
+        
+        # Smart Parse the transcribed text
+        parsed_text = parse_natural_language(text)
         
         # Append to existing text
         if current_text:
-            return current_text + "\n" + text
-        return text
+            return current_text + "\n" + parsed_text
+        return parsed_text
     except Exception as e:
         gr.Warning(f"Voice Error: {str(e)}")
         return current_text
