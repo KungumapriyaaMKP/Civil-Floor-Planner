@@ -250,7 +250,7 @@ def create_3d_plot(plot_w, plot_h, rooms, placed, scale):
     fig.update_layout(
         scene = dict(
             xaxis = dict(title='Width (ft)', range=[0, plot_w]),
-            yaxis = dict(title='Depth (ft)', range=[0, plot_h], scaleanchor="x"),
+            yaxis = dict(title='Depth (ft)', range=[0, plot_h]),
             zaxis = dict(title='Height (ft)', range=[0, 15]),
             aspectmode='manual',
             aspectratio=dict(x=1, y=plot_h/plot_w, z=0.3)
