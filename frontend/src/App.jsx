@@ -33,6 +33,8 @@ const App = () => {
   const [roomText, setRoomText] = useState("Master Bedroom, 14, 12, top-left\nLiving, 20, 15, center\nKitchen, 12, 10, bottom-right\nBath, 8, 6, any");
   const [layout, setLayout] = useState(null);
   const [plotlyData, setPlotlyData] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [error, setError] = useState(null);
 
@@ -46,6 +48,7 @@ const App = () => {
   }, []);
 
   const generateLayout = async () => {
+    setLoading(true);
     setError(null);
     try {
       const resp = await axios.post(`${API_BASE}/generate`, {
@@ -56,7 +59,7 @@ const App = () => {
       setPlotlyData(null);
     } catch (err) {
       console.error(err);
-      setError("Failed to connect to AI Engine. Ensure backend is running.");
+      setError(`API Error: ${err.message}. Check if Backend is Running.`);
     } finally {
       setLoading(false);
     }
@@ -178,8 +181,8 @@ const App = () => {
               onMouseDown={startRecording}
               onMouseUp={stopRecording}
               className={`w-full py-4 rounded-xl flex items-center justify-center gap-3 font-bold text-xs tracking-widest transition-all ${isRecording
-                ? 'bg-red-500 text-white shadow-[0_0_20px_rgba(239,68,68,0.4)] animate-pulse'
-                : 'bg-zinc-900 border border-zinc-800 text-slate-300 hover:border-indigo-500/50 hover:text-white group'
+                ? "bg-red-500 text-white shadow-[0_0_20px_rgba(239,68,68,0.4)] animate-pulse"
+                : "bg-zinc-900 border border-zinc-800 text-slate-300 hover:border-indigo-500/50 hover:text-white group"
                 }`}
             >
               {isRecording ? (
@@ -249,7 +252,7 @@ const App = () => {
             </p>
           )}
           <p className="text-[9px] text-zinc-600 font-bold tracking-widest flex items-center justify-center gap-2">
-            <Settings className="w-3 h-3" /> ENGINE READY
+            <Settings className="w-3 h-3" /> ENGINE READY [v1.0.3-stable]
           </p>
         </div>
       </motion.aside>
@@ -315,15 +318,15 @@ const App = () => {
 
                   <div ref={blueprintRef} className="aspect-[4/3] w-full min-h-[550px] bg-[#0a0a0c] rounded-[3rem] flex items-center justify-center p-8 lg:p-24 overflow-hidden relative group">
                     {/* Architectural Grid Background */}
-                    <div className="absolute inset-0 opacity-[0.04] pointer-events-none" style={{ backgroundImage: 'radial-gradient(#fff 1px, transparent 1px)', backgroundSize: '40px 40px' }} />
-                    <div className="absolute inset-0 opacity-[0.02] pointer-events-none" style={{ backgroundImage: 'linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px)', backgroundSize: '100px 100px' }} />
+                    <div className="absolute inset-0 opacity-[0.04] pointer-events-none" style={{ backgroundImage: "radial-gradient(#fff 1px, transparent 1px)", backgroundSize: "40px 40px" }} />
+                    <div className="absolute inset-0 opacity-[0.02] pointer-events-none" style={{ backgroundImage: "linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px)", backgroundSize: "100px 100px" }} />
 
                     <div
                       className="relative bg-[#0d0d10] border-2 border-zinc-800 shadow-[0_0_150px_rgba(0,0,0,0.8)] transition-all duration-1000 group-hover:scale-[1.01] flex items-center justify-center"
                       style={{
                         width: `${layout.plot.w * 10}px`,
                         height: `${layout.plot.h * 10}px`,
-                        maxWidth: '100%',
+                        maxWidth: "100%",
                         aspectRatio: `${layout.plot.w} / ${layout.plot.h}`
                       }}
                     >
@@ -339,7 +342,7 @@ const App = () => {
                               top: `${y * 10}px`,
                               width: `${w * 10}px`,
                               height: `${h * 10}px`,
-                              backgroundColor: room?.floor_color || '#eee'
+                              backgroundColor: room?.floor_color || "#eee"
                             }}
                           >
                             <span className="text-zinc-900 text-[10px] font-black px-2 text-center leading-tight truncate w-full mix-blend-multiply opacity-70">{room?.name}</span>
@@ -392,26 +395,26 @@ const App = () => {
                           autosize: true,
                           width: undefined,
                           height: undefined,
-                          paper_bgcolor: 'rgba(0,0,0,0)',
-                          plot_bgcolor: 'rgba(0,0,0,0)',
-                          font: { color: '#ccc', family: 'Inter', size: 10 },
+                          paper_bgcolor: "rgba(0,0,0,0)",
+                          plot_bgcolor: "rgba(0,0,0,0)",
+                          font: { color: "#ccc", family: "Inter", size: 10 },
                           scene: {
                             ...plotlyData.layout.scene,
-                            bgcolor: 'rgba(10,10,12,1)',
-                            xaxis: { ...plotlyData.layout.scene.xaxis, gridcolor: '#2e2e33', zerolinecolor: '#444', title: { font: { size: 10, color: '#666' } } },
-                            yaxis: { ...plotlyData.layout.scene.yaxis, gridcolor: '#2e2e33', zerolinecolor: '#444', title: { font: { size: 10, color: '#666' } } },
-                            zaxis: { ...plotlyData.layout.scene.zaxis, gridcolor: '#2e2e33', zerolinecolor: '#444', title: { font: { size: 10, color: '#666' } } },
+                            bgcolor: "rgba(10,10,12,1)",
+                            xaxis: { ...plotlyData.layout.scene.xaxis, gridcolor: "#2e2e33", zerolinecolor: "#444", title: { font: { size: 10, color: "#666" } } },
+                            yaxis: { ...plotlyData.layout.scene.yaxis, gridcolor: "#2e2e33", zerolinecolor: "#444", title: { font: { size: 10, color: "#666" } } },
+                            zaxis: { ...plotlyData.layout.scene.zaxis, gridcolor: "#2e2e33", zerolinecolor: "#444", title: { font: { size: 10, color: "#666" } } },
                           }
                         }}
                         useResizeHandler={true}
-                        style={{ width: '100%', height: '100%' }}
+                        style={{ width: "100%", height: "100%" }}
                         config={{
                           displayModeBar: true,
                           scrollZoom: true,
                           responsive: true,
                           toImageButtonOptions: {
-                            format: 'png',
-                            filename: 'CivilPlan_3D',
+                            format: "png",
+                            filename: "CivilPlan_3D",
                             height: 1000,
                             width: 1500,
                             scale: 2

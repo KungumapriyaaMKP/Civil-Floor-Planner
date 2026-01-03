@@ -18,13 +18,8 @@ app = FastAPI(title="CivilPlan AI Backend")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://localhost:7860",
-        "https://civil-floor-plan-generator.web.app",
-        "https://civil-floor-plan-generator.firebaseapp.com"
-    ],
-    allow_credentials=True,
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
