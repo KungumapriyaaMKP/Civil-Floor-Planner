@@ -237,10 +237,10 @@ async def visualize_3d(req: VisRequest):
     # Base
     fig.add_trace(go.Mesh3d(
         x=[0, plot_w, plot_w, 0], y=[0, 0, plot_h, plot_h], z=[0, 0, 0, 0],
-        color='#f0f0f0', name='Base', opacity=0.5
+        color='#ffffff', name='Base', opacity=0.8
     ))
     
-    wall_h, wall_t = 10, 0.5
+    wall_h, wall_t = 10, 0.4
     
     # Helper
     def make_box(x, y, z, w, h, d, color, name):
@@ -251,7 +251,8 @@ async def visualize_3d(req: VisRequest):
             i = [7, 0, 0, 0, 4, 4, 6, 6, 4, 0, 3, 2],
             j = [3, 4, 1, 2, 5, 6, 5, 2, 0, 1, 6, 3],
             k = [0, 7, 2, 3, 6, 7, 1, 1, 5, 5, 7, 6],
-            color=color, name=name, flatshading=True
+            color=color, name=name, flatshading=True,
+            lighting=dict(ambient=0.6, diffuse=1, roughness=0.1, specular=1, fresnel=2)
         )
 
     for r in req.rooms:
@@ -263,20 +264,21 @@ async def visualize_3d(req: VisRequest):
         fig.add_trace(go.Mesh3d(
             x=[px, px+pw, px+pw, px], y=[py, py, py+ph, py+ph], z=[0.1]*4,
             i=[0,0], j=[1,2], k=[2,3], color=r["floor_color"],
-            name=r["name"], hovertext=hover_txt, hoverinfo="text"
+            name=r["name"], hovertext=hover_txt, hoverinfo="text",
+            lighting=dict(ambient=0.8)
         ))
         
         # Walls
-        fig.add_trace(make_box(px, py, 0, pw, wall_t, wall_h, "#FFF", "Wall")) # N
-        fig.add_trace(make_box(px, py+ph-wall_t, 0, pw, wall_t, wall_h, "#FFF", "Wall")) # S
-        fig.add_trace(make_box(px, py, 0, wall_t, ph, wall_h, "#FFF", "Wall")) # W
-        fig.add_trace(make_box(px+pw-wall_t, py, 0, wall_t, ph, wall_h, "#FFF", "Wall")) # E
+        fig.add_trace(make_box(px, py, 0, pw, wall_t, wall_h, "#E0E0E0", "Wall")) # N
+        fig.add_trace(make_box(px, py+ph-wall_t, 0, pw, wall_t, wall_h, "#E0E0E0", "Wall")) # S
+        fig.add_trace(make_box(px, py, 0, wall_t, ph, wall_h, "#E0E0E0", "Wall")) # W
+        fig.add_trace(make_box(px+pw-wall_t, py, 0, wall_t, ph, wall_h, "#E0E0E0", "Wall")) # E
         
         # Furniture
         key = r["key"]
         if "bed" in key:
             bx, by = px+(pw-6)/2, py+(ph-7)/2
-            fig.add_trace(make_box(bx, by, 0, 6, 7, 2, "#FFF", "Bed"))
+            fig.add_trace(make_box(bx, by, 0, 6, 7, 2, "#FAFAFA", "Bed"))
             fig.add_trace(make_box(bx, by, 0, 6, 1, 4, "#5D4037", "Headboard"))
         elif "kitchen" in key:
              fig.add_trace(make_box(px, py, 0, pw, 2, 3, "#E0E0E0", "Counter"))
@@ -288,11 +290,12 @@ async def visualize_3d(req: VisRequest):
 
     fig.update_layout(
          scene = dict(
-            xaxis = dict(title='Width', range=[0, plot_w]),
-            yaxis = dict(title='Depth', range=[plot_h, 0]), # Corrected Orientation
-            zaxis = dict(title='Height', range=[0, 15]),
+            xaxis = dict(title='Width', range=[0, plot_w], showgrid=True, gridcolor='#333'),
+            yaxis = dict(title='Depth', range=[plot_h, 0], showgrid=True, gridcolor='#333'),
+            zaxis = dict(title='Height', range=[0, 15], showgrid=True, gridcolor='#333'),
             aspectmode='manual',
-            aspectratio=dict(x=1, y=plot_h/plot_w, z=0.3)
+            aspectratio=dict(x=1, y=plot_h/plot_w, z=0.5), # Increased Height
+            camera=dict(eye=dict(x=1.8, y=1.8, z=1.5)) # Improved Default Angle
         ),
         margin=dict(l=0, r=0, b=0, t=0),
         paper_bgcolor="rgba(0,0,0,0)"
