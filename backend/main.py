@@ -10,6 +10,7 @@ import plotly.graph_objects as go
 from transformers import pipeline
 import re
 import os
+from fastapi.responses import FileResponse
 
 # ==================================================
 # App Setup
@@ -31,25 +32,22 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Health check (Both paths)
+# Health check
 @app.get("/api/health")
 @app.get("/health")
 async def health_check():
-    return {"status": "ok", "engine": "ready"}
+    return {"status": "ok", "engine": "ready", "version": "1.0.5"}
 
 # ==================================================
 # LOGIC: Voice & Parsing
 # ==================================================
-# Voice Recognition Setup (Startup Logic)
 asr_pipe = None
 try:
     print("Loading Whisper Model...")
-    # OPTIMIZATION: Reverting to 'tiny.en' for speed
     asr_pipe = pipeline("automatic-speech-recognition", model="openai/whisper-tiny.en")
     print("Whisper Model Loaded Successfully.")
 except Exception as e:
     print(f"Failed to load Whisper: {e}")
-    asr_pipe = None
 
 def parse_natural_language(text):
     import re
@@ -63,7 +61,6 @@ def parse_natural_language(text):
     for word, digit in word_to_num.items():
         text_lower = text_lower.replace(word, digit)
         
-    # 1. Extract Room Name
     room_types = ["master bedroom", "bedroom", "kitchen", "living room", "living", "dining room", "dining", "bathroom", "bath", "garage", "office", "study", "hall"]
     name = "Room"
     for r in room_types:
@@ -72,7 +69,6 @@ def parse_natural_language(text):
             name = text[start_idx : start_idx+len(r)].title()
             break
             
-    # 2. Extract Dimensions
     dims = re.search(r'(\d+)\s*(?:x|by|\s)\s*(\d+)', text_lower)
     w, h = 10, 10
     if dims:
@@ -81,7 +77,6 @@ def parse_natural_language(text):
         nums = re.findall(r'\d+', text_lower)
         if len(nums) >= 2: w, h = int(nums[0]), int(nums[1])
     
-    # 3. Extract Position
     pos = "any"
     if "top left" in text_lower: pos = "top-left"
     elif "top right" in text_lower: pos = "top-right"
@@ -96,12 +91,9 @@ def parse_natural_language(text):
 async def transcribe_audio(file: UploadFile = File(...)):
     if not asr_pipe:
         raise HTTPException(status_code=503, detail="Whisper model not loaded")
-    
     contents = await file.read()
-    # Save temp
     with open("temp.wav", "wb") as f:
         f.write(contents)
-        
     try:
         text = asr_pipe("temp.wav")["text"]
         parsed = parse_natural_language(text.strip())
@@ -126,14 +118,12 @@ def parse_rooms_data(text):
         try:
             name = p[0].strip()
             key_name = name.lower()
-            # Colors
             if "bed" in key_name:     floor = "#E8EAF6"
             elif "bath" in key_name:  floor = "#E1F5FE"
             elif "kitchen" in key_name: floor = "#EFEBE9"
             elif "living" in key_name: floor = "#FAFAFA"
             elif "dining" in key_name: floor = "#F3E5F5"
             else: floor = "#F5F5F5"
-            
             rooms.append({
                 "name": name, "key": key_name,
                 "w": int(p[1]), "h": int(p[2]),
@@ -151,19 +141,12 @@ def check_overlap(x, y, w, h, placed):
     return False
 
 def compute_layout(plot_w, plot_h, rooms):
-    # Constants
-    M = 2 # Virtual Margin in feet
-    scale = 1 # Logical scale
-    
     px0, py0 = 0, 0
     px1, py1 = plot_w, plot_h
-    
     placed = {}
     fixed_rooms = [r for r in rooms if r["pos"] in ["top-left", "top-right", "bottom-left", "bottom-right", "center"]]
     floating_rooms = [r for r in rooms if r["pos"] not in ["top-left", "top-right", "bottom-left", "bottom-right", "center"]]
     floating_rooms.sort(key=lambda r: r["area"], reverse=True)
-    
-    # Place Fixed
     for r in fixed_rooms:
         rw, rh = r["w"], r["h"]
         x, y = None, None
@@ -172,11 +155,8 @@ def compute_layout(plot_w, plot_h, rooms):
         elif r["pos"] == "bottom-left": x, y = px0, py1-rh
         elif r["pos"] == "bottom-right": x, y = px1-rw, py1-rh
         elif r["pos"] == "center": x, y = (px1-rw)//2, (py1-rh)//2
-        
         if x is not None and not check_overlap(x, y, rw, rh, placed):
             placed[r["key"]] = (x, y, rw, rh)
-
-    # Place Floating
     step = 1
     for r in floating_rooms:
         rw, rh = r["w"], r["h"]
@@ -188,7 +168,6 @@ def compute_layout(plot_w, plot_h, rooms):
                     found = True
                     break
             if found: break
-            
     return placed
 
 @app.post("/api/generate")
@@ -199,15 +178,9 @@ async def generate_layout(req: GenerateRequest):
         plot_w, plot_h = int(pw), int(ph)
     except:
         plot_w, plot_h = 40, 30
-        
     rooms = parse_rooms_data(req.room_text)
     placed = compute_layout(plot_w, plot_h, rooms)
-    
-    # Calculate Stats
-    total_area = sum(r["area"] for r in rooms)
-    placed_area = sum([r["area"] for r in rooms if r["key"] in placed])
-    efficiency = int((placed_area / (plot_w*plot_h)) * 100)
-    
+    efficiency = int((sum([r["area"] for r in rooms if r["key"] in placed]) / (plot_w*plot_h)) * 100)
     return {
         "plot": {"w": plot_w, "h": plot_h},
         "rooms": rooms,
@@ -229,87 +202,38 @@ class VisRequest(BaseModel):
 async def visualize_3d(req: VisRequest):
     plot_w = req.plot["w"]
     plot_h = req.plot["h"]
-    
     fig = go.Figure()
-    
-    # Base
-    fig.add_trace(go.Mesh3d(
-        x=[0, plot_w, plot_w, 0], y=[0, 0, plot_h, plot_h], z=[0, 0, 0, 0],
-        color='#ffffff', name='Base', opacity=0.8
-    ))
-    
+    fig.add_trace(go.Mesh3d(x=[0, plot_w, plot_w, 0], y=[0, 0, plot_h, plot_h], z=[0, 0, 0, 0], color='#ffffff', name='Base', opacity=0.8))
     wall_h, wall_t = 10, 0.4
-    
-    # Helper
     def make_box(x, y, z, w, h, d, color, name):
-        return go.Mesh3d(
-            x=[x, x+w, x+w, x,   x, x+w, x+w, x],
-            y=[y, y, y+h, y+h,   y, y, y+h, y+h],
-            z=[z, z, z, z,       z+d, z+d, z+d, z+d],
-            i = [7, 0, 0, 0, 4, 4, 6, 6, 4, 0, 3, 2],
-            j = [3, 4, 1, 2, 5, 6, 5, 2, 0, 1, 6, 3],
-            k = [0, 7, 2, 3, 6, 7, 1, 1, 5, 5, 7, 6],
-            color=color, name=name, flatshading=True,
-            lighting=dict(ambient=0.6, diffuse=1, roughness=0.1, specular=1, fresnel=2)
-        )
-
+        return go.Mesh3d(x=[x, x+w, x+w, x,   x, x+w, x+w, x], y=[y, y, y+h, y+h,   y, y, y+h, y+h], z=[z, z, z, z,       z+d, z+d, z+d, z+d], i = [7, 0, 0, 0, 4, 4, 6, 6, 4, 0, 3, 2], j = [3, 4, 1, 2, 5, 6, 5, 2, 0, 1, 6, 3], k = [0, 7, 2, 3, 6, 7, 1, 1, 5, 5, 7, 6], color=color, name=name, flatshading=True, lighting=dict(ambient=0.6, diffuse=1, roughness=0.1, specular=1, fresnel=2))
     for r in req.rooms:
         if r["key"] not in req.placed: continue
         px, py, pw, ph = req.placed[r["key"]]
-        
-        # Floor
-        hover_txt = f"<b>{r['name']}</b><br>{r['w']}x{r['h']}"
-        fig.add_trace(go.Mesh3d(
-            x=[px, px+pw, px+pw, px], y=[py, py, py+ph, py+ph], z=[0.1]*4,
-            i=[0,0], j=[1,2], k=[2,3], color=r["floor_color"],
-            name=r["name"], hovertext=hover_txt, hoverinfo="text",
-            lighting=dict(ambient=0.8)
-        ))
-        
-        # Walls
-        fig.add_trace(make_box(px, py, 0, pw, wall_t, wall_h, "#E0E0E0", "Wall")) # N
-        fig.add_trace(make_box(px, py+ph-wall_t, 0, pw, wall_t, wall_h, "#E0E0E0", "Wall")) # S
-        fig.add_trace(make_box(px, py, 0, wall_t, ph, wall_h, "#E0E0E0", "Wall")) # W
-        fig.add_trace(make_box(px+pw-wall_t, py, 0, wall_t, ph, wall_h, "#E0E0E0", "Wall")) # E
-        
-        # Furniture
-        key = r["key"]
-        if "bed" in key:
+        fig.add_trace(go.Mesh3d(x=[px, px+pw, px+pw, px], y=[py, py, py+ph, py+ph], z=[0.1]*4, i=[0,0], j=[1,2], k=[2,3], color=r["floor_color"], name=r["name"], hovertext=f"<b>{r['name']}</b><br>{r['w']}x{r['h']}", hoverinfo="text", lighting=dict(ambient=0.8)))
+        fig.add_trace(make_box(px, py, 0, pw, wall_t, wall_h, "#E0E0E0", "Wall"))
+        fig.add_trace(make_box(px, py+ph-wall_t, 0, pw, wall_t, wall_h, "#E0E0E0", "Wall"))
+        fig.add_trace(make_box(px, py, 0, wall_t, ph, wall_h, "#E0E0E0", "Wall"))
+        fig.add_trace(make_box(px+pw-wall_t, py, 0, wall_t, ph, wall_h, "#E0E0E0", "Wall"))
+        if "bed" in r["key"]:
             bx, by = px+(pw-6)/2, py+(ph-7)/2
             fig.add_trace(make_box(bx, by, 0, 6, 7, 2, "#FAFAFA", "Bed"))
             fig.add_trace(make_box(bx, by, 0, 6, 1, 4, "#5D4037", "Headboard"))
-        elif "kitchen" in key:
-             fig.add_trace(make_box(px, py, 0, pw, 2, 3, "#E0E0E0", "Counter"))
-        elif "dining" in key:
+        elif "kitchen" in r["key"]: fig.add_trace(make_box(px, py, 0, pw, 2, 3, "#E0E0E0", "Counter"))
+        elif "dining" in r["key"]:
              tx, ty = px+(pw-5)/2, py+(ph-5)/2
              fig.add_trace(make_box(tx, ty, 2.5, 5, 5, 0.2, "#8D6E63", "Table"))
-        elif "living" in key:
-             fig.add_trace(make_box(px+2, py+2, 0.1, pw-4, ph-4, 0.05, "#90A4AE", "Rug"))
-
-    fig.update_layout(
-         scene = dict(
-            xaxis = dict(title='Width', range=[0, plot_w], showgrid=True, gridcolor='#333'),
-            yaxis = dict(title='Depth', range=[plot_h, 0], showgrid=True, gridcolor='#333'),
-            zaxis = dict(title='Height', range=[0, 15], showgrid=True, gridcolor='#333'),
-            aspectmode='manual',
-            aspectratio=dict(x=1, y=plot_h/plot_w, z=0.5), # Increased Height
-            camera=dict(eye=dict(x=1.8, y=1.8, z=1.5)) # Improved Default Angle
-        ),
-        margin=dict(l=0, r=0, b=0, t=0),
-        paper_bgcolor="rgba(0,0,0,0)"
-    )
-    
+        elif "living" in r["key"]: fig.add_trace(make_box(px+2, py+2, 0.1, pw-4, ph-4, 0.05, "#90A4AE", "Rug"))
+    fig.update_layout(scene=dict(xaxis=dict(range=[0, plot_w], gridcolor='#333'), yaxis=dict(range=[plot_h, 0], gridcolor='#333'), zaxis=dict(range=[0, 15], gridcolor='#333'), aspectmode='manual', aspectratio=dict(x=1, y=plot_h/plot_w, z=0.5), camera=dict(eye=dict(x=1.8, y=1.8, z=1.5))), margin=dict(l=0, r=0, b=0, t=0), paper_bgcolor="rgba(0,0,0,0)")
     return json.loads(plotly.io.to_json(fig))
 
-# GET Fallbacks for debugging 405
-@app.get("/api/generate")
-async def diag_generate(): return {"error": "Use POST to this endpoint"}
-
-@app.get("/api/transcribe")
-async def diag_transcribe(): return {"error": "Use POST to this endpoint"}
-
-@app.get("/api/visualize")
-async def diag_visualize(): return {"error": "Use POST to this endpoint"}
+# Static Files - This MUST be at the very bottom
+if os.path.exists("frontend/dist"):
+    app.mount("/assets", StaticFiles(directory="frontend/dist/assets"), name="assets")
+    @app.get("/{full_path:path}")
+    async def serve_frontend(full_path: str):
+        if full_path.startswith("api"): raise HTTPException(status_code=404)
+        return FileResponse("frontend/dist/index.html")
 
 if __name__ == "__main__":
     import uvicorn
