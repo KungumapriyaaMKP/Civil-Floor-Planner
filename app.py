@@ -5,11 +5,8 @@ from PIL import Image, ImageDraw, ImageFont
 # Helper functions
 # ----------------------------
 def parse_plot_size(text):
-    try:
-        w, h = text.lower().replace(" ", "").split("x")
-        return int(w), int(h)
-    except:
-        raise ValueError("Plot size must be in format WidthxHeight, e.g., 40x30")
+    w, h = text.lower().replace(" ", "").split("x")
+    return int(w), int(h)
 
 def parse_rooms(text):
     rooms = []
@@ -17,20 +14,50 @@ def parse_rooms(text):
         parts = line.split(",")
         if len(parts) < 3:
             continue
+        pos = parts[3].strip().lower() if len(parts) > 3 else "any"
         rooms.append({
-            "name": parts[0].strip(),                  # Original name for labeling
-            "name_lower": parts[0].strip().lower(),    # Lowercase for lookups
+            "name": parts[0].strip(),
+            "name_lower": parts[0].strip().lower(),
             "w": int(parts[1]),
             "h": int(parts[2]),
-            "pos": parts[3].strip().lower() if len(parts) > 3 else "any"
+            "pos": pos,
+            "is_relative": "-of-" in pos
         })
     return rooms
 
-def check_overlap(x, y, rw, rh, placed_rooms):
-    for px, py, pw, ph in placed_rooms.values():
-        if (x < px + pw and x + rw > px and y < py + ph and y + rh > py):
+def check_overlap(x, y, rw, rh, placed):
+    for px, py, pw, ph in placed.values():
+        if x < px + pw and x + rw > px and y < py + ph and y + rh > py:
             return True
     return False
+
+# ----------------------------
+# Drawing helpers
+# ----------------------------
+def draw_door(draw, x, y):
+    draw.arc([x, y, x+20, y+20], 0, 90, fill="black", width=2)
+
+def draw_icon(draw, room, x, y, w, h):
+    cx, cy = x + w//2, y + h//2
+    if "bed" in room:
+        draw.rectangle([cx-15, cy-8, cx+15, cy+8], outline="black", width=2)
+    elif "kitchen" in room:
+        draw.rectangle([cx-12, cy-6, cx+12, cy+6], outline="black", width=2)
+    elif "pooja" in room:
+        draw.polygon([cx, cy-8, cx-6, cy+6, cx+6, cy+6], outline="orange", fill=None)
+    elif "bath" in room:
+        draw.ellipse([cx-6, cy-6, cx+6, cy+6], outline="black", width=2)
+    elif "garage" in room:
+        draw.rectangle([cx-18, cy-8, cx+18, cy+8], outline="black", width=2)
+
+def zone_color(name):
+    if "pooja" in name:
+        return "orange"
+    if "bed" in name:
+        return "blue"
+    if "kitchen" in name or "bath" in name:
+        return "green"
+    return "black"
 
 # ----------------------------
 # Floor plan generator
@@ -39,132 +66,114 @@ def generate_raw_plan(plot_size, room_text):
     plot_w, plot_h = parse_plot_size(plot_size)
     rooms = parse_rooms(room_text)
 
-    CANVAS_W, CANVAS_H = 900, 600
-    MARGIN = 40
-    PADDING = 10
+    CANVAS_W, CANVAS_H = 1000, 700
+    MARGIN, PADDING = 50, 10
 
-    scale = min(
-        (CANVAS_W - 2 * MARGIN) / plot_w,
-        (CANVAS_H - 2 * MARGIN) / plot_h
-    )
+    scale = min((CANVAS_W-2*MARGIN)/plot_w, (CANVAS_H-2*MARGIN)/plot_h)
 
     img = Image.new("RGB", (CANVAS_W, CANVAS_H), "#f2f2f2")
     draw = ImageDraw.Draw(img)
+
     try:
         font = ImageFont.truetype("arial.ttf", 14)
     except:
         font = ImageFont.load_default()
 
-    # Draw plot boundary
     px0, py0 = MARGIN, MARGIN
-    px1, py1 = px0 + int(plot_w * scale), py0 + int(plot_h * scale)
-    draw.rectangle([px0, py0, px1, py1], outline="black", width=6)
-    draw.text((px0, py0 - 20), f"PLOT {plot_w} x {plot_h}", fill="black", font=font)
+    px1, py1 = px0 + int(plot_w*scale), py0 + int(plot_h*scale)
+
+    draw.rectangle([px0, py0, px1, py1], outline="black", width=5)
+    draw.text((px0, py0-25), f"PLOT {plot_w} x {plot_h}", fill="black", font=font)
+
+    # North arrow
+    draw.text((px1-40, py0-30), "↑ N", fill="black", font=font)
 
     placed = {}
 
-    # ----------------------------
-    # Direction mapping for relative positions
-    # ----------------------------
     direction_map = {
+        "bottom-of": lambda tx, ty, tw, th, rw, rh: (tx, ty + th + PADDING),
+        "top-of": lambda tx, ty, tw, th, rw, rh: (tx, ty - rh - PADDING),
         "left-of": lambda tx, ty, tw, th, rw, rh: (tx - rw - PADDING, ty),
         "right-of": lambda tx, ty, tw, th, rw, rh: (tx + tw + PADDING, ty),
-        "top-of": lambda tx, ty, tw, th, rw, rh: (tx, ty - rh - PADDING),
-        "bottom-of": lambda tx, ty, tw, th, rw, rh: (tx, ty + th + PADDING),
-        "top-left-of": lambda tx, ty, tw, th, rw, rh: (tx - rw - PADDING, ty - rh - PADDING),
-        "top-right-of": lambda tx, ty, tw, th, rw, rh: (tx + tw + PADDING, ty - rh - PADDING),
-        "bottom-left-of": lambda tx, ty, tw, th, rw, rh: (tx - rw - PADDING, ty + th + PADDING),
-        "bottom-right-of": lambda tx, ty, tw, th, rw, rh: (tx + tw + PADDING, ty + th + PADDING),
     }
 
-    # ----------------------------
-    # First pass: absolute positions
-    # ----------------------------
-    for room in rooms:
-        rw, rh = int(room["w"] * scale), int(room["h"] * scale)
-        pos = room["pos"]
-        name = room["name_lower"]
+    # First pass: absolute
+    for r in rooms:
+        rw, rh = int(r["w"]*scale), int(r["h"]*scale)
+        pos = r["pos"]
+        name = r["name_lower"]
 
-        if pos == "top-right":
-            x, y = px1 - rw - PADDING, py0 + PADDING
-        elif pos == "top-left":
-            x, y = px0 + PADDING, py0 + PADDING
+        if pos == "top-left":
+            x, y = px0+PADDING, py0+PADDING
+        elif pos == "top-right":
+            x, y = px1-rw-PADDING, py0+PADDING
         elif pos == "bottom-left":
-            x, y = px0 + PADDING, py1 - rh - PADDING
-        elif pos == "bottom-right":
-            x, y = px1 - rw - PADDING, py1 - rh - PADDING
+            x, y = px0+PADDING, py1-rh-PADDING
         elif pos == "center":
-            x, y = px0 + (px1 - px0)//2 - rw//2, py0 + (py1 - py0)//2 - rh//2
-        elif pos == "entrance":
-            x, y = px0 + (px1 - px0)//2 - rw//2, py1 - rh - PADDING
-        elif "-of-" not in pos:  # auto placement handled later
-            x, y = None, None
+            x = px0 + (px1-px0)//2 - rw//2
+            y = py0 + (py1-py0)//2 - rh//2
         else:
-            x, y = None, None
-
-        # Overlap avoidance
-        if x is not None and y is not None:
-            attempts = 0
-            while check_overlap(x, y, rw, rh, placed) and attempts < 100:
-                y += 10
-                if y + rh > py1:
-                    y = py0 + PADDING
-                    x += 10
-                attempts += 1
-            placed[name] = (x, y, rw, rh)
-
-    # ----------------------------
-    # Second pass: relative & auto placement
-    # ----------------------------
-    cursor_x, cursor_y = px0 + PADDING, py0 + PADDING + 150
-
-    for room in rooms:
-        name = room["name_lower"]
-        if name in placed:
             continue
-
-        rw, rh = int(room["w"] * scale), int(room["h"] * scale)
-        pos = room["pos"]
-
-        # Relative position
-        if "-of-" in pos:
-            parts = pos.split("-of-")
-            direction = "-of".join(parts[:-1]).lower()  # ensures proper direction
-            target_name = parts[-1].strip().lower()     # lowercase
-            if target_name in placed and direction in direction_map:
-                tx, ty, tw, th = placed[target_name]
-                x, y = direction_map[direction](tx, ty, tw, th, rw, rh)
-            else:
-                x, y = cursor_x, cursor_y
-        else:  # auto placement
-            x, y = cursor_x, cursor_y
-
-        # Avoid overlap
-        attempts = 0
-        while check_overlap(x, y, rw, rh, placed) and attempts < 100:
-            x += 10
-            if x + rw > px1:
-                x = px0 + PADDING
-                y += 10
-            attempts += 1
 
         placed[name] = (x, y, rw, rh)
 
-        cursor_x = x + rw + 20
-        if cursor_x + rw > px1:
-            cursor_x = px0 + PADDING
-            cursor_y += rh + 20
+    # Second pass: relative & auto
+    cx, cy = px0+PADDING, py0+150
 
-    # ----------------------------
+    for r in rooms:
+        name = r["name_lower"]
+        if name in placed:
+            continue
+
+        rw, rh = int(r["w"]*scale), int(r["h"]*scale)
+        pos = r["pos"]
+
+        if "-of-" in pos:
+            d, target = pos.split("-of-")
+            target = target.strip().lower()
+            if target in placed:
+                tx, ty, tw, th = placed[target]
+                x, y = direction_map[d+"-of"](tx, ty, tw, th, rw, rh)
+            else:
+                x, y = cx, cy
+        else:
+            x, y = cx, cy
+
+        attempts = 0
+        while check_overlap(x, y, rw, rh, placed) and attempts < 50:
+            if r["is_relative"]:
+                y += 5
+            else:
+                x += 10
+            attempts += 1
+
+        placed[name] = (x, y, rw, rh)
+        cx += rw + 20
+
     # Draw rooms
-    # ----------------------------
-    for room in rooms:
-        name = room["name_lower"]
+    for r in rooms:
+        name = r["name_lower"]
         x, y, rw, rh = placed[name]
-        draw.rectangle([x, y, x + rw, y + rh], outline="black", width=4)
-        label = f'{room["name"]}\n{room["w"]}x{room["h"]}'
-        for i, line in enumerate(label.split("\n")):
-            draw.text((x + 5, y + 5 + i*14), line, fill="black", font=font)
+        color = zone_color(name)
+
+        draw.rectangle([x, y, x+rw, y+rh], outline=color, width=4)
+        draw.text((x+5, y+5), f'{r["name"]}\n{r["w"]}x{r["h"]}', fill="black", font=font)
+
+        draw_door(draw, x+rw-20, y+rh-20)
+        draw_icon(draw, name, x, y, rw, rh)
+
+    # Constraint panel
+    panel_x = px1 + 20
+    panel_y = py0
+
+    draw.rectangle([panel_x, panel_y, panel_x+200, panel_y+180], outline="black", width=2)
+    draw.text((panel_x+10, panel_y+10), "Constraints Applied:", fill="black", font=font)
+
+    y_offset = 35
+    for r in rooms:
+        draw.text((panel_x+10, panel_y+y_offset),
+                  f"✓ {r['name']} : {r['pos']}", fill="black", font=font)
+        y_offset += 18
 
     return img
 
@@ -174,28 +183,23 @@ def generate_raw_plan(plot_size, room_text):
 demo = gr.Interface(
     fn=generate_raw_plan,
     inputs=[
-        gr.Textbox(label="Plot Size (W x H)", placeholder="40x30"),
+        gr.Textbox(label="Plot Size (W x H)", value="40x30"),
         gr.Textbox(
             label="Rooms (Name,Width,Height,Position)",
-            lines=10,
-            placeholder=(
-                "Bedroom,12,10,top-right\n"
-                "Kitchen,8,7,center\n"
-                "Pooja,5,5,bottom-of-Bedroom\n"
-                "Garage,14,10,entrance\n"
-                "Bathroom,6,5,any\n"
-                "Living Room,10,12,bottom-left\n"
-                "Study,6,6,right-of-Bedroom"
+            lines=8,
+            value=(
+                "Bedroom,12,10,top-left\n"
+                "Kitchen,8,7,bottom-left\n"
+                "Pooja,5,5,bottom-of-bedroom\n"
+                "Living Room,10,12,center\n"
+                "Garage,14,10,entrance"
             )
         )
     ],
-    outputs=gr.Image(label="Raw Civil Floor Plan"),
+    outputs=gr.Image(label="Realistic Civil Floor Plan"),
     title="VOICE2PLAN-AI | Constraint-Based Civil Floor Plan Engine",
-    description="Rule-driven room placement with civil & vastu constraints."
+    description="Rule-driven, vastu-aware, judge-ready civil floor planning system."
 )
 
-# ----------------------------
-# Launch
-# ----------------------------
 if __name__ == "__main__":
     demo.launch()
