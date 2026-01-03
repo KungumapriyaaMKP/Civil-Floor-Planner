@@ -32,7 +32,7 @@ def check_overlap(x, y, rw, rh, placed, ignore=None):
     return False
 
 # ----------------------------
-# Initial layout computation
+# Initial layout
 # ----------------------------
 def compute_layout(plot_w, plot_h, rooms, scale, px0, py0, px1, py1):
     PADDING = 10
@@ -45,7 +45,6 @@ def compute_layout(plot_w, plot_h, rooms, scale, px0, py0, px1, py1):
         "bottom-of": lambda tx, ty, tw, th, rw, rh: (tx, ty + th + PADDING),
     }
 
-    # First pass (absolute positions)
     for r in rooms:
         rw, rh = int(r["w"] * scale), int(r["h"] * scale)
         pos = r["pos"]
@@ -53,12 +52,6 @@ def compute_layout(plot_w, plot_h, rooms, scale, px0, py0, px1, py1):
 
         if pos == "top-left":
             x, y = px0 + PADDING, py0 + PADDING
-        elif pos == "top-right":
-            x, y = px1 - rw - PADDING, py0 + PADDING
-        elif pos == "bottom-left":
-            x, y = px0 + PADDING, py1 - rh - PADDING
-        elif pos == "bottom-right":
-            x, y = px1 - rw - PADDING, py1 - rh - PADDING
         elif pos == "center":
             x = px0 + (px1 - px0)//2 - rw//2
             y = py0 + (py1 - py0)//2 - rh//2
@@ -67,12 +60,9 @@ def compute_layout(plot_w, plot_h, rooms, scale, px0, py0, px1, py1):
 
         placed[name] = (x, y, rw, rh)
 
-    # Second pass (relative / auto)
     cx, cy = px0 + PADDING, py0 + 150
-
     for r in rooms:
-        name = r["name_lower"]
-        if name in placed:
+        if r["name_lower"] in placed:
             continue
 
         rw, rh = int(r["w"] * scale), int(r["h"] * scale)
@@ -92,31 +82,28 @@ def compute_layout(plot_w, plot_h, rooms, scale, px0, py0, px1, py1):
         while check_overlap(x, y, rw, rh, placed):
             y += 10
 
-        placed[name] = (x, y, rw, rh)
+        placed[r["name_lower"]] = (x, y, rw, rh)
         cx += rw + 20
 
     return placed
 
 # ----------------------------
-# Main render + movement logic
+# Render + Move
 # ----------------------------
-def generate_plan(plot_size, room_text, selected_room, direction, state):
+def move_room(plot_size, room_text, selected_room, direction, state):
     plot_w, plot_h = parse_plot_size(plot_size)
     rooms = parse_rooms(room_text)
 
     CANVAS_W, CANVAS_H = 900, 600
     MARGIN = 40
-    MOVE_STEP = 10
+    STEP = 10
 
-    scale = min(
-        (CANVAS_W - 2*MARGIN) / plot_w,
-        (CANVAS_H - 2*MARGIN) / plot_h
-    )
+    scale = min((CANVAS_W - 2*MARGIN) / plot_w,
+                (CANVAS_H - 2*MARGIN) / plot_h)
 
     px0, py0 = MARGIN, MARGIN
     px1, py1 = px0 + int(plot_w * scale), py0 + int(plot_h * scale)
 
-    # Initialize state only once
     if "placed" not in state:
         state["placed"] = compute_layout(
             plot_w, plot_h, rooms, scale, px0, py0, px1, py1
@@ -124,29 +111,23 @@ def generate_plan(plot_size, room_text, selected_room, direction, state):
 
     placed = state["placed"]
 
-    # Move selected room
     if selected_room in placed:
         x, y, rw, rh = placed[selected_room]
-
         dx, dy = 0, 0
-        if direction == "Left":
-            dx = -MOVE_STEP
-        elif direction == "Right":
-            dx = MOVE_STEP
-        elif direction == "Up":
-            dy = -MOVE_STEP
-        elif direction == "Down":
-            dy = MOVE_STEP
+
+        if direction == "left": dx = -STEP
+        if direction == "right": dx = STEP
+        if direction == "up": dy = -STEP
+        if direction == "down": dy = STEP
 
         nx = max(px0, min(x + dx, px1 - rw))
         ny = max(py0, min(y + dy, py1 - rh))
 
-        if not check_overlap(nx, ny, rw, rh, placed, ignore=selected_room):
+        if not check_overlap(nx, ny, rw, rh, placed, selected_room):
             placed[selected_room] = (nx, ny, rw, rh)
 
     state["placed"] = placed
 
-    # Draw
     img = Image.new("RGB", (CANVAS_W, CANVAS_H), "#f2f2f2")
     draw = ImageDraw.Draw(img)
 
@@ -156,60 +137,59 @@ def generate_plan(plot_size, room_text, selected_room, direction, state):
         font = ImageFont.load_default()
 
     draw.rectangle([px0, py0, px1, py1], outline="black", width=6)
-    draw.text((px0, py0 - 20),
-              f"PLOT {plot_w} x {plot_h}",
-              fill="black", font=font)
 
     for r in rooms:
         x, y, rw, rh = placed[r["name_lower"]]
-        draw.rectangle([x, y, x + rw, y + rh], outline="black", width=4)
-        draw.text((x + 5, y + 5),
-                  f'{r["name"]}\n{r["w"]}x{r["h"]}',
+        draw.rectangle([x, y, x+rw, y+rh], outline="black", width=4)
+        draw.text((x+5, y+5),
+                  f"{r['name']}\n{r['w']}x{r['h']}",
                   fill="black", font=font)
 
     return img, state
 
 # ----------------------------
-# UI
+# UI (USER FRIENDLY)
 # ----------------------------
 with gr.Blocks(title="VOICE2PLAN-AI") as demo:
-    gr.Markdown("## VOICE2PLAN-AI – Interactive Civil Floor Planner")
+    gr.Markdown("## 🏠 VOICE2PLAN-AI – Interactive Civil Floor Planner")
 
-    plot = gr.Textbox(label="Plot Size", value="40x30")
-    rooms = gr.Textbox(
-        label="Rooms",
-        lines=8,
-        value=(
-            "Bedroom,12,10,top-left\n"
-            "Pooja,5,5,bottom-of-bedroom\n"
-            "Living Room,10,12,center\n"
-            "Kitchen,8,7,bottom-left\n"
-            "Garage,14,10,entrance"
+    with gr.Row():
+        plot = gr.Textbox(label="Plot Size", value="40x30")
+        rooms = gr.Textbox(
+            label="Rooms",
+            lines=6,
+            value=(
+                "Bedroom,12,10,top-left\n"
+                "Pooja,5,5,bottom-of-bedroom\n"
+                "Living Room,10,12,center\n"
+                "Kitchen,8,7,bottom-left"
+            )
         )
-    )
 
-    room_select = gr.Dropdown(
-        choices=["bedroom", "pooja", "living room", "kitchen", "garage"],
-        value="bedroom",
-        label="Select Room to Move"
-    )
+    with gr.Row():
+        room_select = gr.Dropdown(
+            ["bedroom", "pooja", "living room", "kitchen"],
+            label="Select Room to Move",
+            value="bedroom"
+        )
 
-    direction = gr.Radio(
-        ["Left", "Right", "Up", "Down"],
-        value="Right",
-        label="Move Direction"
-    )
+    gr.Markdown("### Move Selected Room")
 
-    move_btn = gr.Button("Move Room")
+    with gr.Row():
+        up = gr.Button("⬆")
+    with gr.Row():
+        left = gr.Button("⬅")
+        right = gr.Button("➡")
+    with gr.Row():
+        down = gr.Button("⬇")
+
     image = gr.Image(label="Floor Plan")
-
     state = gr.State({})
 
-    move_btn.click(
-        generate_plan,
-        inputs=[plot, rooms, room_select, direction, state],
-        outputs=[image, state]
-    )
+    up.click(move_room, [plot, rooms, room_select, gr.State("up"), state], [image, state])
+    down.click(move_room, [plot, rooms, room_select, gr.State("down"), state], [image, state])
+    left.click(move_room, [plot, rooms, room_select, gr.State("left"), state], [image, state])
+    right.click(move_room, [plot, rooms, room_select, gr.State("right"), state], [image, state])
 
 if __name__ == "__main__":
     demo.queue().launch()
