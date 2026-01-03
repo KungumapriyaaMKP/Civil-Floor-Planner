@@ -26,7 +26,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 const API_BASE = window.location.hostname === "localhost"
   ? "http://localhost:7860/api"
-  : "https://kungumapriyaa-civil-project.hf.space/api";
+  : "https://kungumapriyaa-civil-project.hf.space";
 
 const App = () => {
   const [plotSize, setPlotSize] = useState("40x30");

@@ -24,27 +24,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Health check MUST be first
+@app.get("/health")
 @app.get("/api/health")
 async def health_check():
     return {"status": "ok", "engine": "ready"}
-
-# Serve Frontend (Static Files)
-# We mount 'frontend/dist' to root
-from fastapi.responses import FileResponse
-import os
-
-# API Routes first!
-# ... (API logic below) ...
-
-# Mount Static assets
-if os.path.exists("frontend/dist"):
-    app.mount("/assets", StaticFiles(directory="frontend/dist/assets"), name="assets")
-
-@app.get("/")
-async def serve_index():
-    if os.path.exists("frontend/dist/index.html"):
-        return FileResponse("frontend/dist/index.html")
-    return {"message": "Frontend not built yet. Run 'npm run build' in frontend/"}
 
 # ==================================================
 # LOGIC: Voice & Parsing
@@ -100,6 +84,7 @@ def parse_natural_language(text):
     
     return f"{name}, {w}, {h}, {pos}"
 
+@app.post("/transcribe")
 @app.post("/api/transcribe")
 async def transcribe_audio(file: UploadFile = File(...)):
     if not asr_pipe:
@@ -199,6 +184,7 @@ def compute_layout(plot_w, plot_h, rooms):
             
     return placed
 
+@app.post("/generate")
 @app.post("/api/generate")
 async def generate_layout(req: GenerateRequest):
     try:
@@ -231,6 +217,7 @@ class VisRequest(BaseModel):
     rooms: List[Dict[str, Any]]
     placed: Dict[str, List[int]]
 
+@app.post("/visualize")
 @app.post("/api/visualize")
 async def visualize_3d(req: VisRequest):
     plot_w = req.plot["w"]
