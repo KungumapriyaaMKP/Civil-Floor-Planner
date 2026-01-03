@@ -14,7 +14,14 @@ import os
 # ==================================================
 # App Setup
 # ==================================================
-app = FastAPI(title="CivilPlan AI Backend")
+app = FastAPI(title="CivilPlan AI Backend", redirect_slashes=False)
+
+# Logging Middleware for debugging
+@app.middleware("http")
+async def add_process_time_header(request, call_next):
+    print(f"DEBUG: Request {request.method} {request.url}")
+    response = await call_next(request)
+    return response
 
 app.add_middleware(
     CORSMiddleware,
@@ -24,9 +31,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Health check MUST be first
-@app.get("/health")
+# Health check (Both paths)
 @app.get("/api/health")
+@app.get("/health")
 async def health_check():
     return {"status": "ok", "engine": "ready"}
 
@@ -84,8 +91,8 @@ def parse_natural_language(text):
     
     return f"{name}, {w}, {h}, {pos}"
 
-@app.post("/transcribe")
 @app.post("/api/transcribe")
+@app.post("/api/transcribe/")
 async def transcribe_audio(file: UploadFile = File(...)):
     if not asr_pipe:
         raise HTTPException(status_code=503, detail="Whisper model not loaded")
@@ -184,8 +191,8 @@ def compute_layout(plot_w, plot_h, rooms):
             
     return placed
 
-@app.post("/generate")
 @app.post("/api/generate")
+@app.post("/api/generate/")
 async def generate_layout(req: GenerateRequest):
     try:
         pw, ph = req.plot_size.lower().replace(" ", "").split("x")
@@ -217,8 +224,8 @@ class VisRequest(BaseModel):
     rooms: List[Dict[str, Any]]
     placed: Dict[str, List[int]]
 
-@app.post("/visualize")
 @app.post("/api/visualize")
+@app.post("/api/visualize/")
 async def visualize_3d(req: VisRequest):
     plot_w = req.plot["w"]
     plot_h = req.plot["h"]
@@ -293,6 +300,16 @@ async def visualize_3d(req: VisRequest):
     )
     
     return json.loads(plotly.io.to_json(fig))
+
+# GET Fallbacks for debugging 405
+@app.get("/api/generate")
+async def diag_generate(): return {"error": "Use POST to this endpoint"}
+
+@app.get("/api/transcribe")
+async def diag_transcribe(): return {"error": "Use POST to this endpoint"}
+
+@app.get("/api/visualize")
+async def diag_visualize(): return {"error": "Use POST to this endpoint"}
 
 if __name__ == "__main__":
     import uvicorn
