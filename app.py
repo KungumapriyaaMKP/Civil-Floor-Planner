@@ -312,20 +312,20 @@ with gr.Blocks(theme=gr.themes.Soft(), css=custom_css, title="CivilPlan AI 2.0")
     
     state = gr.State()
     
-    gr.Markdown("# 🏡 CivilPlan AI | Realistic Floor Planner")
+    gr.Markdown("# CivilPlan AI | Realistic Floor Planner")
     
     with gr.Row():
         with gr.Column(scale=1):
-            gr.Markdown("### 1. Configure")
-            p_in = gr.Textbox(label="Plot Size (ft)", value="40x30")
-            r_in = gr.Textbox(label="Rooms", value="Master Bedroom, 14, 12, top-left\nLiving, 20, 15, center\nKitchen, 12, 10, bottom-right\nBath, 8, 6, any", lines=5)
+            gr.Markdown("### Configuration")
+            p_in = gr.Textbox(label="Plot Size (ft)", value="40x30", info="Width x Depth")
+            r_in = gr.Textbox(label="Rooms (Name, Width, Depth, Position)", value="Master Bedroom, 14, 12, top-left\nLiving, 20, 15, center\nKitchen, 12, 10, bottom-right\nBath, 8, 6, any", lines=5)
             btn_gen = gr.Button("Generate 2D Plan", variant="primary")
             status_txt = gr.Markdown("")
             
         with gr.Column(scale=2):
-            gr.Markdown("### 2. Preview & Confirm")
+            gr.Markdown("### Preview & Confirm")
             img_out = gr.Image(label="2D Blueprint", type="pil", interactive=False)
-            btn_3d = gr.Button("Confirm & Build 3D Dollhouse ➡️", size="lg", visible=False)
+            btn_3d = gr.Button("Confirm & Build 3D View", size="lg", visible=False)
     
     with gr.Row():
         plot_out = gr.Plot(label="3D Dollhouse View", visible=False)
