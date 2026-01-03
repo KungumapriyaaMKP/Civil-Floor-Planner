@@ -1,232 +1,89 @@
 import gradio as gr
 from PIL import Image, ImageDraw, ImageFont
 
-# ==================================================
-# Helpers
-# ==================================================
-def parse_plot_size(text):
-    w, h = text.lower().replace(" ", "").split("x")
-    return int(w), int(h)
+# --- Styling Constants ---
+BG_COLOR = "#f4f7f6"
+WALL_COLOR = "#2c3e50"
+ROOM_COLOR = "#ffffff"
+TEXT_COLOR = "#34495e"
+GRID_COLOR = "#dcdde1"
 
-def parse_rooms(text):
+def generate_interactive_plan(plot_size, room_data, move_room_name, move_x, move_y):
+    # 1. Setup Canvas
+    try:
+        w_ft, h_ft = map(int, plot_size.lower().split('x'))
+    except: return None
+    
+    canvas_w, canvas_h = 800, 600
+    scale = min(700/w_ft, 500/h_ft)
+    offset_x, offset_y = 50, 50
+
+    img = Image.new("RGB", (canvas_w, canvas_h), BG_COLOR)
+    draw = ImageDraw.Draw(img)
+    
+    # Draw Grid
+    for i in range(0, canvas_w, 20): draw.line([(i, 0), (i, canvas_h)], fill=GRID_COLOR, width=1)
+    for i in range(0, canvas_h, 20): draw.line([(0, i), (canvas_w, i)], fill=GRID_COLOR, width=1)
+
+    # 2. Parse and Place Rooms
     rooms = []
-    for line in text.strip().split("\n"):
-        p = line.split(",")
-        if len(p) < 3:
-            continue
-        rooms.append({
-            "name": p[0].strip(),
-            "key": p[0].strip().lower(),
-            "w": int(p[1]),
-            "h": int(p[2]),
-            "pos": p[3].strip().lower() if len(p) > 3 else "any"
-        })
-    return rooms
+    for line in room_data.strip().split('\n'):
+        parts = line.split(',')
+        if len(parts) >= 3:
+            rooms.append({"name": parts[0].strip(), "w": int(parts[1]), "h": int(parts[2])})
 
-def check_overlap(x, y, w, h, placed, ignore=None):
-    for k, (px, py, pw, ph) in placed.items():
-        if k == ignore:
-            continue
-        if x < px+pw and x+w > px and y < py+ph and y+h > py:
-            return True
-    return False
+    placed_rooms = {}
+    current_x, current_y = offset_x, offset_y
 
-# ==================================================
-# Layout computation
-# ==================================================
-def compute_layout(plot_w, plot_h, rooms):
-    CANVAS_W, CANVAS_H = 900, 600
-    MARGIN, PAD = 40, 10
+    for room in rooms:
+        rw, rh = int(room['w'] * scale), int(room['h'] * scale)
+        
+        # INTERACTIVE STEP: If this is the room the user wants to move, use the sliders
+        if room['name'].lower() == move_room_name.lower():
+            x, y = offset_x + int(move_x * scale), offset_y + int(move_y * scale)
+        else:
+            x, y = current_x, current_y
+            current_x += rw + 10 # Default auto-layout logic
+            if current_x + rw > offset_x + (w_ft * scale):
+                current_x = offset_x
+                current_y += rh + 10
 
-    scale = min(
-        (CANVAS_W - 2*MARGIN) / plot_w,
-        (CANVAS_H - 2*MARGIN) / plot_h
-    )
+        # Draw Room
+        draw.rectangle([x, y, x + rw, y + rh], fill=ROOM_COLOR, outline=WALL_COLOR, width=3)
+        draw.text((x+5, y+5), f"{room['name']}\n({room['w']}x{room['h']})", fill=TEXT_COLOR)
 
-    px0, py0 = MARGIN, MARGIN
-    px1 = px0 + int(plot_w * scale)
-    py1 = py0 + int(plot_h * scale)
-
-    placed = {}
-
-    # absolute placement
-    for r in rooms:
-        rw, rh = int(r["w"]*scale), int(r["h"]*scale)
-        if r["pos"] == "top-left":
-            placed[r["key"]] = (px0+PAD, py0+PAD, rw, rh)
-        elif r["pos"] == "top-right":
-            placed[r["key"]] = (px1-rw-PAD, py0+PAD, rw, rh)
-        elif r["pos"] == "bottom-left":
-            placed[r["key"]] = (px0+PAD, py1-rh-PAD, rw, rh)
-        elif r["pos"] == "bottom-right":
-            placed[r["key"]] = (px1-rw-PAD, py1-rh-PAD, rw, rh)
-        elif r["pos"] == "center":
-            placed[r["key"]] = (
-                px0 + (px1-px0)//2 - rw//2,
-                py0 + (py1-py0)//2 - rh//2,
-                rw, rh
-            )
-
-    # auto placement
-    cx, cy = px0+PAD, py0+150
-    for r in rooms:
-        if r["key"] in placed:
-            continue
-        rw, rh = int(r["w"]*scale), int(r["h"]*scale)
-        x, y = cx, cy
-        while check_overlap(x, y, rw, rh, placed):
-            y += 15
-        placed[r["key"]] = (x, y, rw, rh)
-        cx += rw + 20
-
-    return placed, (px0, py0, px1, py1)
-
-# ==================================================
-# Rendering
-# ==================================================
-def render_2d(plot_w, plot_h, rooms, placed, bounds):
-    px0, py0, px1, py1 = bounds
-    img = Image.new("RGB", (900, 600), "#f2f2f2")
-    d = ImageDraw.Draw(img)
-
-    try:
-        font = ImageFont.truetype("arial.ttf", 14)
-    except:
-        font = ImageFont.load_default()
-
-    d.rectangle([px0, py0, px1, py1], outline="black", width=6)
-    d.text((px0, py0-20), f"PLOT {plot_w} x {plot_h}", fill="black", font=font)
-
-    for r in rooms:
-        x, y, w, h = placed[r["key"]]
-        d.rectangle([x, y, x+w, y+h], outline="black", width=4)
-        d.text((x+5, y+5), r["name"], fill="black", font=font)
-
+    # Draw Plot Boundary
+    draw.rectangle([offset_x, offset_y, offset_x + int(w_ft*scale), offset_y + int(h_ft*scale)], outline="#e74c3c", width=5)
+    
     return img
 
-def render_3d(rooms, placed):
-    img = Image.new("RGB", (900, 600), "#eaeaea")
-    d = ImageDraw.Draw(img)
+# --- UI with Custom CSS ---
+custom_css = """
+.gradio-container { font-family: 'Segoe UI', sans-serif; }
+.move-panel { background-color: #f9f9f9; padding: 15px; border-radius: 10px; border: 1px solid #ddd; }
+"""
 
-    try:
-        font = ImageFont.truetype("arial.ttf", 13)
-    except:
-        font = ImageFont.load_default()
-
-    d.text((20, 20), "3D View (Final Layout)", fill="black", font=font)
-
-    for r in rooms:
-        x, y, w, h = placed[r["key"]]
-        d.rectangle([x+6, y+6, x+w+6, y+h+6], fill="#cfcfcf")
-        d.rectangle([x, y-18, x+w, y+h-18], fill="#ffffff", outline="#555", width=2)
-        d.rectangle([x, y, x+w, y+h], fill="#fafafa", outline="#333", width=3)
-        d.text((x+6, y+6), r["name"], fill="black", font=font)
-
-    return img
-
-# ==================================================
-# Handlers
-# ==================================================
-def generate_2d(plot, room_text, state):
-    plot_w, plot_h = parse_plot_size(plot)
-    rooms = parse_rooms(room_text)
-
-    placed, bounds = compute_layout(plot_w, plot_h, rooms)
-    state.clear()
-    state["placed"] = placed
-    state["bounds"] = bounds
-    state["final"] = False
-
-    return render_2d(plot_w, plot_h, rooms, placed, bounds), state
-
-def move_room(plot, room_text, room_key, direction, state):
-    # SAFETY GUARDS — FIXES YOUR ERROR
-    if (
-        room_key is None or room_key == ""
-        or "placed" not in state
-        or room_key not in state["placed"]
-        or state.get("final", False)
-    ):
-        return gr.update(), state
-
-    plot_w, plot_h = parse_plot_size(plot)
-    rooms = parse_rooms(room_text)
-    placed = state["placed"]
-    px0, py0, px1, py1 = state["bounds"]
-
-    step = 10
-    x, y, w, h = placed[room_key]
-
-    dx = dy = 0
-    if direction == "left": dx = -step
-    if direction == "right": dx = step
-    if direction == "up": dy = -step
-    if direction == "down": dy = step
-
-    nx = max(px0, min(x+dx, px1-w))
-    ny = max(py0, min(y+dy, py1-h))
-
-    if not check_overlap(nx, ny, w, h, placed, room_key):
-        placed[room_key] = (nx, ny, w, h)
-
-    return render_2d(plot_w, plot_h, rooms, placed, state["bounds"]), state
-
-def confirm_3d(plot, room_text, state):
-    if "placed" not in state:
-        return gr.update(), state
-
-    rooms = parse_rooms(room_text)
-    state["final"] = True
-    return render_3d(rooms, state["placed"]), state
-
-# ==================================================
-# UI
-# ==================================================
-with gr.Blocks(title="VOICE2PLAN-AI") as demo:
-    gr.Markdown("## VOICE2PLAN-AI | 2D Planning → Confirm → 3D")
-
-    plot = gr.Textbox(label="Plot Size", value="40x30")
-    rooms = gr.Textbox(
-        label="Rooms (Name,Width,Height,Position)",
-        lines=8,
-        value=(
-            "Bedroom,12,10,top-left\n"
-            "Living Room,10,12,center\n"
-            "Kitchen,8,7,bottom-left\n"
-            "Pooja,5,5,any"
-        )
-    )
-
-    generate = gr.Button("Generate 2D Plan")
-    room_select = gr.Dropdown(label="Select Room")
-    img = gr.Image(label="Output")
-    state = gr.State({})
-
-    gr.Markdown("ℹ️ Select a room before moving")
-
+with gr.Blocks(css=custom_css) as demo:
+    gr.Markdown("# 🏢 VOICE2PLAN-AI: Interactive Designer")
+    gr.Markdown("Step 1: Define your plot. Step 2: List rooms. Step 3: **Move any room manually.**")
+    
     with gr.Row():
-        up = gr.Button("⬆", scale=1)
-    with gr.Row():
-        left = gr.Button("⬅", scale=1)
-        right = gr.Button("➡", scale=1)
-    with gr.Row():
-        down = gr.Button("⬇", scale=1)
+        with gr.Column(scale=1):
+            plot_input = gr.Textbox(label="Plot Size (WxH)", value="40x30")
+            room_input = gr.Textbox(label="Rooms (Name,W,H)", lines=5, value="Bedroom,12,12\nKitchen,10,8\nLiving,15,15")
+            
+            gr.Markdown("### 🔧 Move Room Tools", elem_classes="move-panel")
+            target_room = gr.Textbox(label="Room Name to Move", placeholder="e.g., Kitchen")
+            pos_x = gr.Slider(0, 50, label="Move Horizontal (ft)", value=0)
+            pos_y = gr.Slider(0, 50, label="Move Vertical (ft)", value=0)
+            
+            btn = gr.Button("Generate / Update Plan", variant="primary")
+            
+        with gr.Column(scale=2):
+            output_image = gr.Image(type="pil", label="Architectural Layout")
 
-    confirm = gr.Button("Confirm Layout & Generate 3D")
+    btn.click(generate_interactive_plan, 
+              inputs=[plot_input, room_input, target_room, pos_x, pos_y], 
+              outputs=output_image)
 
-    def update_dropdown(txt):
-        return [r["key"] for r in parse_rooms(txt)]
-
-    rooms.change(update_dropdown, rooms, room_select)
-
-    generate.click(generate_2d, [plot, rooms, state], [img, state])
-
-    up.click(move_room, [plot, rooms, room_select, gr.State("up"), state], [img, state])
-    down.click(move_room, [plot, rooms, room_select, gr.State("down"), state], [img, state])
-    left.click(move_room, [plot, rooms, room_select, gr.State("left"), state], [img, state])
-    right.click(move_room, [plot, rooms, room_select, gr.State("right"), state], [img, state])
-
-    confirm.click(confirm_3d, [plot, rooms, state], [img, state])
-
-if __name__ == "__main__":
-    demo.launch()
+demo.launch()
