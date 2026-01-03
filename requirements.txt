@@ -1,3 +1,3 @@
 gradio
-pillow
-
+matplotlib
+numpy
