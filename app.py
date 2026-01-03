@@ -294,11 +294,14 @@ def generate_step_1(plot, room_text):
 
 def generate_step_2(state):
     if not state: 
-        return None, gr.update()
-        
-    fig = create_3d_plot(state["plot_w"], state["plot_h"], state["rooms"], state["placed"], state["scale"])
-    return fig, gr.update(visible=True)
-
+        return gr.update()
+    
+    try:
+        fig = create_3d_plot(state["plot_w"], state["plot_h"], state["rooms"], state["placed"], state["scale"])
+        return gr.update(value=fig, visible=True)
+    except Exception as e:
+        gr.Warning(f"3D Generation Error: {str(e)}")
+        return gr.update(visible=True)
 
 custom_css = """
 .container { max-width: 1200px; margin: auto; padding: 20px; }
@@ -328,7 +331,7 @@ with gr.Blocks(theme=gr.themes.Soft(), css=custom_css, title="CivilPlan AI 2.0")
         plot_out = gr.Plot(label="3D Dollhouse View", visible=False)
 
     btn_gen.click(generate_step_1, [p_in, r_in], [img_out, status_txt, state, btn_3d])
-    btn_3d.click(generate_step_2, [state], [plot_out, plot_out])
+    btn_3d.click(generate_step_2, [state], [plot_out])
 
 if __name__ == "__main__":
     demo.launch()
