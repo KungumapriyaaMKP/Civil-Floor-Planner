@@ -252,7 +252,7 @@ const App = () => {
             </p>
           )}
           <p className="text-[9px] text-zinc-600 font-bold tracking-widest flex items-center justify-center gap-2">
-            <Settings className="w-3 h-3" /> ENGINE READY [v1.0.3-stable]
+            <Settings className="w-3 h-3" /> ENGINE READY [v1.0.6-final]
           </p>
         </div>
       </motion.aside>
