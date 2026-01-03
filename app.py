@@ -97,7 +97,7 @@ def generate_raw_plan(plot_size, room_text):
             x, y = px0 + (px1 - px0)//2 - rw//2, py0 + (py1 - py0)//2 - rh//2
         elif pos == "entrance":
             x, y = px0 + (px1 - px0)//2 - rw//2, py1 - rh - PADDING
-        elif "-of-" not in pos:  # will handle in second pass
+        elif "-of-" not in pos:  # auto placement handled later
             x, y = None, None
         else:
             x, y = None, None
@@ -129,8 +129,8 @@ def generate_raw_plan(plot_size, room_text):
         # Relative position
         if "-of-" in pos:
             parts = pos.split("-of-")
-            direction = "-of".join(parts[:-1]).lower()  # ensure lowercase
-            target_name = parts[-1].strip().lower()
+            direction = "-of".join(parts[:-1]).lower()  # ensures proper direction
+            target_name = parts[-1].strip().lower()     # lowercase
             if target_name in placed and direction in direction_map:
                 tx, ty, tw, th = placed[target_name]
                 x, y = direction_map[direction](tx, ty, tw, th, rw, rh)
@@ -181,7 +181,7 @@ demo = gr.Interface(
             placeholder=(
                 "Bedroom,12,10,top-right\n"
                 "Kitchen,8,7,center\n"
-                "Pooja,5,5,bottom-left-of-Bedroom\n"
+                "Pooja,5,5,bottom-of-Bedroom\n"
                 "Garage,14,10,entrance\n"
                 "Bathroom,6,5,any\n"
                 "Living Room,10,12,bottom-left\n"
