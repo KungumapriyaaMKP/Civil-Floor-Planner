@@ -1,3 +1,6 @@
 gradio
 Pillow
 plotly
+transformers
+torch
+scipy

@@ -303,6 +303,34 @@ def generate_step_2(state):
         gr.Warning(f"3D Generation Error: {str(e)}")
         return gr.update(visible=True)
 
+# Voice Recognition Setup (Lazy Loading)
+asr_pipe = None
+
+def transcribe_voice(audio_path, current_text):
+    global asr_pipe
+    if audio_path is None:
+        return current_text
+    
+    try:
+        from transformers import pipeline
+        if asr_pipe is None:
+            gr.Info("Loading Whisper Model... (One time only)")
+            asr_pipe = pipeline("automatic-speech-recognition", model="openai/whisper-tiny.en")
+        
+        text = asr_pipe(audio_path)["text"]
+        
+        # Simple formatting cleanup
+        text = text.strip()
+        if not text: return current_text
+        
+        # Append to existing text
+        if current_text:
+            return current_text + "\n" + text
+        return text
+    except Exception as e:
+        gr.Warning(f"Voice Error: {str(e)}")
+        return current_text
+
 custom_css = """
 .container { max-width: 1200px; margin: auto; padding: 20px; }
 .gr-button { font-weight: bold; }
@@ -318,7 +346,12 @@ with gr.Blocks(theme=gr.themes.Soft(), css=custom_css, title="CivilPlan AI 2.0")
         with gr.Column(scale=1):
             gr.Markdown("### Configuration")
             p_in = gr.Textbox(label="Plot Size (ft)", value="40x30", info="Width x Depth")
+            
             r_in = gr.Textbox(label="Rooms (Name, Width, Depth, Position)", value="Master Bedroom, 14, 12, top-left\nLiving, 20, 15, center\nKitchen, 12, 10, bottom-right\nBath, 8, 6, any", lines=5)
+            
+            # Voice Input
+            audio_in = gr.Audio(sources=["microphone"], type="filepath", label="🎙️ Voice Input (Dictate Rooms)")
+            
             btn_gen = gr.Button("Generate 2D Plan", variant="primary")
             status_txt = gr.Markdown("")
             
@@ -326,6 +359,9 @@ with gr.Blocks(theme=gr.themes.Soft(), css=custom_css, title="CivilPlan AI 2.0")
             gr.Markdown("### Preview & Confirm")
             img_out = gr.Image(label="2D Blueprint", type="pil", interactive=False)
             btn_3d = gr.Button("Confirm & Build 3D View", size="lg", visible=False)
+            
+    # Event for Voice
+    audio_in.stop_recording(transcribe_voice, [audio_in, r_in], [r_in])
     
     with gr.Row():
         plot_out = gr.Plot(label="3D Dollhouse View", visible=False)
