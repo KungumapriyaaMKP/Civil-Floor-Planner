@@ -1,16 +1,15 @@
 import gradio as gr
 from PIL import Image, ImageDraw, ImageFont
 import re
-import math
 
 CANVAS_W, CANVAS_H = 950, 580
 MARGIN_X, MARGIN_Y = 50, 50
-PX_TO_FT = 0.05   # visual scale for dimensions
+PX_TO_FT = 0.05
+APP_VERSION = "WOW_BUILD_v3"
 
-
-# ======================================================
-# 1️⃣ INTENT PARSER (STRICT)
-# ======================================================
+# ----------------------------
+# 1️⃣ Parse prompt strictly
+# ----------------------------
 def parse_prompt(prompt):
     prompt = prompt.lower()
 
@@ -28,13 +27,11 @@ def parse_prompt(prompt):
 
     if sum(layout.values()) == 0:
         raise ValueError("Please specify rooms clearly")
-
     return layout
 
-
-# ======================================================
-# 2️⃣ GEOMETRY ENGINE
-# ======================================================
+# ----------------------------
+# 2️⃣ Room placements
+# ----------------------------
 def compute_room_positions(layout):
     positions = {}
     x, y = MARGIN_X, MARGIN_Y
@@ -69,10 +66,9 @@ def compute_room_positions(layout):
 
     return positions
 
-
-# ======================================================
-# 3️⃣ RAW 2D ENGINEERING PLAN
-# ======================================================
+# ----------------------------
+# 3️⃣ Raw Engineering Floor Plan
+# ----------------------------
 def draw_raw_plan(positions):
     img = Image.new("RGB", (CANVAS_W, CANVAS_H), "white")
     d = ImageDraw.Draw(img)
@@ -84,28 +80,29 @@ def draw_raw_plan(positions):
 
     for room, (x, y, w, h) in positions.items():
         # Walls
-        d.rectangle([x, y, x+w, y+h], outline="black", width=4)
+        d.rectangle([x, y, x + w, y + h], outline="black", width=4)
 
         # Door
         door = 36
-        d.arc([x+w//2-door, y+h-door, x+w//2+door, y+h+door],
+        d.arc([x + w // 2 - door, y + h - door, x + w // 2 + door, y + h + door],
               start=180, end=270, fill="black", width=3)
 
-        # Room label
-        d.text((x+8, y+6), room.replace("_", " ").title(), fill="black", font=font)
+        # Label
+        d.text((x + 8, y + 6), room.replace("_", " ").title(), fill="black", font=font)
 
         # Dimensions
         ft_w = round(w * PX_TO_FT, 1)
         ft_h = round(h * PX_TO_FT, 1)
-        d.text((x+w//2-20, y-14), f"{ft_w} ft", fill="black", font=font)
-        d.text((x-45, y+h//2), f"{ft_h} ft", fill="black", font=font)
+        d.text((x + w // 2 - 20, y - 14), f"{ft_w} ft", fill="black", font=font)
+        d.text((x - 45, y + h // 2), f"{ft_h} ft", fill="black", font=font)
 
+    # Version label
+    d.text((10, CANVAS_H - 20), APP_VERSION, fill="black", font=font)
     return img
 
-
-# ======================================================
-# 4️⃣ 3D ENGINEERING PLAN
-# ======================================================
+# ----------------------------
+# 4️⃣ 3D Engineering Floor Plan
+# ----------------------------
 ROOM_COLORS = {
     "living_room": "#e3f2fd",
     "bedroom": "#e8f5e9",
@@ -125,31 +122,32 @@ def draw_3d_plan(positions):
         color = ROOM_COLORS.get(base, "#eeeeee")
 
         # Shadow
-        d.rectangle([x+depth, y+depth, x+w+depth, y+h+depth], fill="#bdbdbd")
+        d.rectangle([x + depth, y + depth, x + w + depth, y + h + depth], fill="#bdbdbd")
 
         # Room
-        d.rectangle([x, y, x+w, y+h], fill=color, outline="black", width=3)
-        d.text((x+8, y+6), room.replace("_", " ").title(), fill="black", font=font)
+        d.rectangle([x, y, x + w, y + h], fill=color, outline="black", width=3)
+        d.text((x + 8, y + 6), room.replace("_", " ").title(), fill="black", font=font)
 
-        # Furniture
+        # Furniture icons
         if "bedroom" in room:
-            d.rectangle([x+30, y+60, x+150, y+130], fill="#a1887f")
+            d.rectangle([x + 30, y + 60, x + 150, y + 130], fill="#a1887f")
         elif "kitchen" in room:
-            d.rectangle([x+20, y+50, x+90, y+120], fill="#aed581")
-            d.rectangle([x+100, y+50, x+160, y+90], fill="#ffab91")
+            d.rectangle([x + 20, y + 50, x + 90, y + 120], fill="#aed581")
+            d.rectangle([x + 100, y + 50, x + 160, y + 90], fill="#ffab91")
         elif "living" in room:
-            d.rectangle([x+40, y+70, x+190, y+140], fill="#90caf9")
+            d.rectangle([x + 40, y + 70, x + 190, y + 140], fill="#90caf9")
         elif "bathroom" in room:
-            d.ellipse([x+50, y+50, x+95, y+95], fill="#b39ddb")
+            d.ellipse([x + 50, y + 50, x + 95, y + 95], fill="#b39ddb")
         elif "garage" in room:
-            d.rectangle([x+40, y+60, x+220, y+140], fill="#90a4ae")
+            d.rectangle([x + 40, y + 60, x + 220, y + 140], fill="#90a4ae")
 
+    # Version label
+    d.text((10, CANVAS_H - 20), APP_VERSION, fill="black", font=font)
     return img
 
-
-# ======================================================
-# 5️⃣ PIPELINE
-# ======================================================
+# ----------------------------
+# 5️⃣ Main pipeline
+# ----------------------------
 def generate_floor_plans(prompt):
     layout = parse_prompt(prompt)
     positions = compute_room_positions(layout)
@@ -157,10 +155,9 @@ def generate_floor_plans(prompt):
     three_d = draw_3d_plan(positions)
     return raw, three_d
 
-
-# ======================================================
-# 6️⃣ GRADIO (HF READY)
-# ======================================================
+# ----------------------------
+# 6️⃣ Gradio UI with SSR OFF
+# ----------------------------
 demo = gr.Interface(
     fn=generate_floor_plans,
     inputs=gr.Textbox(
@@ -169,10 +166,10 @@ demo = gr.Interface(
     ),
     outputs=[
         gr.Image(label="Raw Engineering Floor Plan (2D)", format="png"),
-        gr.Image(label="3D Engineering Floor Plan", format="png")
+        gr.Image(label="3D Engineering Floor Plan (3D View)", format="png")
     ],
     title="VOICE2PLAN-AI",
-    description="AI-assisted civil engineering floor plan generator with synchronized 2D technical drawings and 3D visualization."
+    description="Civil floor plan generator with technical 2D and 3D visuals."
 )
 
-demo.launch()
+demo.launch(ssr_mode=False)
