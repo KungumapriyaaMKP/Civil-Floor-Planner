@@ -2,7 +2,7 @@ import gradio as gr
 from PIL import Image, ImageDraw, ImageFont
 
 # ----------------------------
-# Utility functions
+# Parsing
 # ----------------------------
 def parse_plot_size(text):
     w, h = text.lower().replace(" ", "").split("x")
@@ -11,16 +11,17 @@ def parse_plot_size(text):
 def parse_rooms(text):
     rooms = []
     for line in text.strip().split("\n"):
-        name, w, h = line.split(",")
+        parts = line.split(",")
         rooms.append({
-            "name": name.strip(),
-            "w": int(w),
-            "h": int(h)
+            "name": parts[0].strip(),
+            "w": int(parts[1]),
+            "h": int(parts[2]),
+            "pos": parts[3].strip().lower() if len(parts) > 3 else "any"
         })
     return rooms
 
 # ----------------------------
-# Raw floor plan generator
+# Raw plan generator
 # ----------------------------
 def generate_raw_plan(plot_size, room_text):
     plot_w, plot_h = parse_plot_size(plot_size)
@@ -29,81 +30,112 @@ def generate_raw_plan(plot_size, room_text):
     CANVAS_W, CANVAS_H = 900, 600
     MARGIN = 40
 
-    # Scale factor
-    scale_x = (CANVAS_W - 2 * MARGIN) / plot_w
-    scale_y = (CANVAS_H - 2 * MARGIN) / plot_h
-    scale = min(scale_x, scale_y)
+    scale = min(
+        (CANVAS_W - 2 * MARGIN) / plot_w,
+        (CANVAS_H - 2 * MARGIN) / plot_h
+    )
 
     img = Image.new("RGB", (CANVAS_W, CANVAS_H), "#f2f2f2")
     draw = ImageDraw.Draw(img)
+    font = ImageFont.load_default()
 
-    try:
-        font = ImageFont.load_default()
-    except:
-        font = None
-
-    # Draw plot boundary
-    plot_px_w = int(plot_w * scale)
-    plot_px_h = int(plot_h * scale)
-
-    px0 = MARGIN
-    py0 = MARGIN
-    px1 = px0 + plot_px_w
-    py1 = py0 + plot_px_h
+    # Plot boundary
+    px0, py0 = MARGIN, MARGIN
+    px1 = px0 + int(plot_w * scale)
+    py1 = py0 + int(plot_h * scale)
 
     draw.rectangle([px0, py0, px1, py1], outline="black", width=6)
     draw.text((px0, py0 - 15), f"PLOT {plot_w} x {plot_h}", fill="black", font=font)
 
-    # Place rooms
-    cursor_x = px0 + 10
-    cursor_y = py0 + 10
-    row_height = 0
+    placed = {}
+    padding = 10
 
+    # First pass: absolute positions
     for room in rooms:
         rw = int(room["w"] * scale)
         rh = int(room["h"] * scale)
+        pos = room["pos"]
 
-        # Move to next row if overflow
-        if cursor_x + rw > px1:
-            cursor_x = px0 + 10
-            cursor_y += row_height + 15
-            row_height = 0
+        if pos == "top-right":
+            x = px1 - rw - padding
+            y = py0 + padding
+        elif pos == "top-left":
+            x = px0 + padding
+            y = py0 + padding
+        elif pos == "bottom-left":
+            x = px0 + padding
+            y = py1 - rh - padding
+        elif pos == "bottom-right":
+            x = px1 - rw - padding
+            y = py1 - rh - padding
+        elif pos == "entrance":
+            x = px0 + (px1 - px0) // 2 - rw // 2
+            y = py1 - rh - padding
+        else:
+            continue
 
-        # Draw room
-        draw.rectangle(
-            [cursor_x, cursor_y, cursor_x + rw, cursor_y + rh],
-            outline="black",
-            width=4
-        )
+        placed[room["name"].lower()] = (x, y, rw, rh)
 
-        # Label
+    # Second pass: relative & auto
+    cursor_x = px0 + padding
+    cursor_y = py0 + padding + 150
+
+    for room in rooms:
+        name = room["name"].lower()
+        if name in placed:
+            continue
+
+        rw = int(room["w"] * scale)
+        rh = int(room["h"] * scale)
+        pos = room["pos"]
+
+        if pos == "left-of-kitchen" and "kitchen" in placed:
+            kx, ky, kw, kh = placed["kitchen"]
+            x = kx - rw - padding
+            y = ky
+        else:
+            if cursor_x + rw > px1:
+                cursor_x = px0 + padding
+                cursor_y += rh + 20
+            x = cursor_x
+            y = cursor_y
+            cursor_x += rw + 20
+
+        placed[name] = (x, y, rw, rh)
+
+    # Draw rooms
+    for room in rooms:
+        name = room["name"].lower()
+        x, y, rw, rh = placed[name]
+
+        draw.rectangle([x, y, x + rw, y + rh], outline="black", width=4)
         label = f'{room["name"]}\n{room["w"]}x{room["h"]}'
-        draw.text((cursor_x + 5, cursor_y + 5), label, fill="black", font=font)
-
-        cursor_x += rw + 15
-        row_height = max(row_height, rh)
+        draw.text((x + 5, y + 5), label, fill="black", font=font)
 
     return img
 
 # ----------------------------
-# Gradio UI
+# UI
 # ----------------------------
 demo = gr.Interface(
     fn=generate_raw_plan,
     inputs=[
-        gr.Textbox(label="Total Plot Size (W x H)", placeholder="Example: 40x30"),
+        gr.Textbox(label="Plot Size (W x H)", placeholder="40x30"),
         gr.Textbox(
-            label="Rooms (one per line: Name,Width,Height)",
-            placeholder="Bedroom,12,10\nKitchen,8,7\nBathroom,6,5",
-            lines=6
+            label="Rooms (Name,Width,Height,Position)",
+            lines=7,
+            placeholder=(
+                "Bedroom,12,10,top-right\n"
+                "Kitchen,8,7,center\n"
+                "Pooja,5,5,left-of-kitchen\n"
+                "Garage,14,10,entrance\n"
+                "Bathroom,6,5,any"
+            )
         )
     ],
-    outputs=gr.Image(label="Raw Civil Floor Plan (2D)"),
-    title="VOICE2PLAN-AI | Professional Raw Civil Floor Plan Generator",
-    description=(
-        "Enter exact plot size and room dimensions. "
-        "Generates a clean, technical, judge-ready raw floor plan."
-    )
+    outputs=gr.Image(label="Raw Civil Floor Plan"),
+    title="VOICE2PLAN-AI | Constraint-Based Civil Floor Plan Engine",
+    description="Rule-driven room placement with civil & vastu constraints."
 )
 
 demo.launch()
