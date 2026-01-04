@@ -62,7 +62,6 @@ Clear and structured prompts lead to more accurate layouts.
 ###  Recommended Prompt Style✅
 > *“Create a house with a 15x20 living room, a 12x12 bedroom, and a 10x10 kitchen. Add a small balcony next to the bedroom.”*
 
-###  Tips for Judges & Evaluators💡
 
 | Aspect | Recommendation | Example |
 |------|----------------|---------|
